@@ -1,3 +1,6 @@
+const CARTO_API_KEY =
+  process.env.NEXT_PUBLIC_CARTO_API_KEY || 'cb1_4rl4_1_b877170eaa644026e39b00c0';
+
 export const BASEMAPS = [
   {
     id: "google_hybrid",
@@ -69,22 +72,20 @@ export const BASEMAPS = [
   {
     id: "positron",
     name: "Positron (Light)",
-    thumbnail:
-      "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/6/50/32.png",
-    url: "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
+    thumbnail: `https://basemaps.cartocdn.com/rastertiles/light_all/6/50/32.png?key=${CARTO_API_KEY}`,
+    url: `https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`,
     attributions:
-      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+      '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     category: "monochrome",
     is3D: false,
   },
   {
     id: "dark",
     name: "Dark Matter",
-    thumbnail:
-      "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/6/50/32.png",
-    url: "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+    thumbnail: `https://basemaps.cartocdn.com/rastertiles/dark_all/6/50/32.png?key=${CARTO_API_KEY}`,
+    url: `https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`,
     attributions:
-      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+      '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     category: "monochrome",
     is3D: false,
   },
