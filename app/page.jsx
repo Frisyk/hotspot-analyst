@@ -21,6 +21,8 @@ export default function HomePage() {
 
   // Interactive UI states (osm, hitam, topografi)
   const [activeMapType, setActiveMapType] = useState('hitam');
+  // Visual layer mode: 'both' (Gabungan), 'heatmap' (Densitas), 'points' (Titik Api)
+  const [layerMode, setLayerMode] = useState('both');
   const [selectedLegendDate, setSelectedLegendDate] = useState(null);
   const [currentTimeCursor, setCurrentTimeCursor] = useState('2026-10-23 23:59:00');
   const [isCumulative, setIsCumulative] = useState(true);
@@ -155,21 +157,25 @@ export default function HomePage() {
 
   return (
     <main style={styles.main}>
-      {/* Top Header */}
+      {/* Top Header with Layer Mode Selector */}
       <Header
         totalHotspots={displayedHotspots.length}
         firmsCount={firmsCount}
         sipongiCount={sipongiCount}
         activeMapType={activeMapType}
         onSelectMapType={setActiveMapType}
+        layerMode={layerMode}
+        onSelectLayerMode={setLayerMode}
         dbStats={dbStats}
       />
 
-      {/* Main OpenLayers Map Canvas */}
+      {/* Main OpenLayers Map Canvas with Heatmap Density Layer */}
       <MapView
         hotspots={displayedHotspots}
         dateColorMap={dateColorMap}
         activeMapType={activeMapType}
+        layerMode={layerMode}
+        onSelectLayerMode={setLayerMode}
       />
 
       {/* Left Filter Panel (Date & Hour Filter) */}
@@ -193,12 +199,13 @@ export default function HomePage() {
         onToggleCumulative={() => setIsCumulative(!isCumulative)}
       />
 
-      {/* Bottom-Right Date & Color Legend */}
+      {/* Bottom-Right Date & Color Legend + Density Scale */}
       <Legend
         dateColorMap={dateColorMap}
         dateStats={dateStats}
         selectedDate={selectedLegendDate}
         onSelectDate={setSelectedLegendDate}
+        layerMode={layerMode}
       />
     </main>
   );

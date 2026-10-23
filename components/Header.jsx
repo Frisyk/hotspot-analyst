@@ -9,6 +9,8 @@ export default function Header({
   sipongiCount = 0,
   activeMapType = 'hitam',
   onSelectMapType,
+  layerMode = 'both',
+  onSelectLayerMode,
   dbStats = null,
 }) {
   const mapOptions = [
@@ -60,6 +62,40 @@ export default function Header({
           <span style={{ ...styles.sourceDot, backgroundColor: '#00F0FF' }} />
           <span style={styles.statLabel}>SIPONGI:</span>
           <span style={styles.statValue}>{sipongiCount}</span>
+        </div>
+
+        {/* Visual Layer Mode Selector (Gabungan, Densitas, Titik Api) */}
+        <div style={styles.baseMapContainer}>
+          <div style={styles.baseMapLabel}>
+            <Flame size={13} color="#ff4500" />
+            <span>Layer:</span>
+          </div>
+          <div style={styles.baseMapGroup}>
+            {[
+              { id: 'both', label: 'Gabungan' },
+              { id: 'heatmap', label: 'Densitas' },
+              { id: 'points', label: 'Titik Api' },
+            ].map((opt) => {
+              const isActive = layerMode === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  id={`btn-mode-${opt.id}`}
+                  onClick={() => onSelectLayerMode && onSelectLayerMode(opt.id)}
+                  style={{
+                    ...styles.baseMapBtn,
+                    background: isActive ? 'linear-gradient(135deg, #ff4500, #ff7a00)' : 'rgba(255, 255, 255, 0.05)',
+                    color: isActive ? '#ffffff' : '#94a3b8',
+                    borderColor: isActive ? '#ff4500' : 'rgba(255, 255, 255, 0.1)',
+                    boxShadow: isActive ? '0 0 10px rgba(255, 69, 0, 0.4)' : 'none',
+                  }}
+                  title={`Tampilan: ${opt.label}`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Base Map Selector (OSM, Hitam, Topografi) */}

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Check, Filter } from 'lucide-react';
+import { Calendar, Check, Flame, Activity } from 'lucide-react';
 import { hexToRgba } from '../utils/colorPalette';
 
 export default function Legend({
@@ -9,12 +9,15 @@ export default function Legend({
   dateStats = {},
   selectedDate = null,
   onSelectDate,
+  layerMode = 'both',
 }) {
   const dates = Object.keys(dateStats).sort();
 
   if (dates.length === 0) {
     return null;
   }
+
+  const showHeatmapScale = layerMode === 'both' || layerMode === 'heatmap';
 
   return (
     <div style={styles.legendContainer} className="glass-panel">
@@ -81,8 +84,28 @@ export default function Legend({
         })}
       </div>
 
+      {/* Skala Kepadatan Titik Api (Heatmap Density) */}
+      {showHeatmapScale && (
+        <div style={styles.densitySection}>
+          <div style={styles.densityHeader}>
+            <Flame size={12} color="#ff4500" />
+            <span>Skala Densitas Hotspot</span>
+          </div>
+          <div style={styles.densityGradientBar} />
+          <div style={styles.densityScaleLabels}>
+            <span>Rendah</span>
+            <span>Sedang</span>
+            <span>Tinggi (Tumpuk)</span>
+          </div>
+        </div>
+      )}
+
       <div style={styles.footerNote}>
-        Titik diberi warna berbeda sesuai tanggal kejadian untuk memudahkan tracking kronologis.
+        {layerMode === 'heatmap'
+          ? 'Area merah/putih menandakan beberapa titik api terdeteksi di lokasi sama atau berdekatan.'
+          : layerMode === 'both'
+          ? 'Menampilkan layer kepadatan (densitas) bersama marker titik api kronologis.'
+          : 'Titik diberi warna berbeda sesuai tanggal kejadian untuk memudahkan tracking kronologis.'}
       </div>
     </div>
   );
@@ -95,7 +118,7 @@ const styles = {
     right: '20px',
     zIndex: 90,
     width: '240px',
-    maxHeight: '340px',
+    maxHeight: '400px',
     padding: '14px',
     display: 'flex',
     flexDirection: 'column',
@@ -133,14 +156,14 @@ const styles = {
     flexDirection: 'column',
     gap: '6px',
     overflowY: 'auto',
-    maxHeight: '220px',
+    maxHeight: '160px',
     paddingRight: '4px',
   },
   item: {
     display: 'flex',
     alignItems: 'center',
     gap: '10px',
-    padding: '6px 8px',
+    padding: '5px 8px',
     borderRadius: '8px',
     border: '1px solid transparent',
     cursor: 'pointer',
@@ -190,6 +213,36 @@ const styles = {
   checkBadge: {
     display: 'flex',
     alignItems: 'center',
+  },
+  densitySection: {
+    paddingTop: '6px',
+    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  densityHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '11px',
+    fontWeight: '700',
+    color: '#cbd5e1',
+    textTransform: 'uppercase',
+  },
+  densityGradientBar: {
+    height: '8px',
+    borderRadius: '4px',
+    background: 'linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff8800, #ff0000, #ffffff)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    boxShadow: '0 0 8px rgba(255, 69, 0, 0.25)',
+  },
+  densityScaleLabels: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '9px',
+    color: '#94a3b8',
+    fontWeight: '600',
   },
   footerNote: {
     fontSize: '10px',
