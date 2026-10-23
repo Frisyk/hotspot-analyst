@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Flame, Database, Layers, Radio } from 'lucide-react';
+import { Flame, Layers, Radio, EyeOff } from 'lucide-react';
 
 export default function Header({
   totalHotspots = 0,
@@ -11,6 +11,7 @@ export default function Header({
   onSelectMapType,
   layerMode = 'both',
   onSelectLayerMode,
+  onToggleHideUI,
   dbStats = null,
 }) {
   const mapOptions = [
@@ -38,14 +39,16 @@ export default function Header({
       </div>
 
       <div style={styles.statsSection}>
-        {/* Supabase Status Pill */}
-        <div style={styles.statPill} title="Terhubung ke Database Cloud Supabase">
-          <span style={{ ...styles.sourceDot, backgroundColor: '#3ECF8E', boxShadow: '0 0 8px #3ECF8E' }} />
-          <span style={styles.statLabel}>Database:</span>
-          <span style={{ ...styles.statValue, color: '#3ECF8E' }}>
-            Supabase ({dbStats?.total ? `${dbStats.total.toLocaleString()} total` : 'Online'})
-          </span>
-        </div>
+        {/* Total Data Tersimpan (Clean Pill tanpa branding Supabase) */}
+        {dbStats?.total && (
+          <div style={styles.statPill} title="Total titik api tersimpan di database">
+            <span style={{ ...styles.sourceDot, backgroundColor: '#10b981', boxShadow: '0 0 6px #10b981' }} />
+            <span style={styles.statLabel}>Total Data:</span>
+            <span style={{ ...styles.statValue, color: '#10b981' }}>
+              {dbStats.total.toLocaleString()}
+            </span>
+          </div>
+        )}
 
         <div style={styles.statPill}>
           <span style={styles.statLabel}>Ditampilkan:</span>
@@ -129,12 +132,37 @@ export default function Header({
             })}
           </div>
         </div>
+
+        {/* Tombol Peta Penuh / Sembunyikan UI */}
+        <button
+          id="btn-hide-ui"
+          onClick={onToggleHideUI}
+          style={styles.fullScreenBtn}
+          title="Mode Peta Penuh (Sembunyikan Semua Panel)"
+        >
+          <EyeOff size={13} color="#f97316" />
+          <span>Peta Penuh</span>
+        </button>
       </div>
     </header>
   );
 }
 
 const styles = {
+  fullScreenBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    borderRadius: '8px',
+    background: 'rgba(15, 23, 42, 0.8)',
+    border: '1px solid rgba(255, 255, 255, 0.12)',
+    color: '#cbd5e1',
+    fontSize: '11px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+  },
   header: {
     position: 'absolute',
     top: '16px',

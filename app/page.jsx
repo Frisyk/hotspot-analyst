@@ -6,6 +6,7 @@ import MapView from '../components/MapView';
 import FilterPanel from '../components/FilterPanel';
 import TimeSlider from '../components/TimeSlider';
 import Legend from '../components/Legend';
+import { Eye } from 'lucide-react';
 import { generateDateColorMap } from '../utils/colorPalette';
 
 export default function HomePage() {
@@ -23,9 +24,48 @@ export default function HomePage() {
   const [activeMapType, setActiveMapType] = useState('hitam');
   // Visual layer mode: 'both' (Gabungan), 'heatmap' (Densitas), 'points' (Titik Api)
   const [layerMode, setLayerMode] = useState('both');
+  // Hide UI / Clean full screen map mode
+  const [hideUI, setHideUI] = useState(false);
   const [selectedLegendDate, setSelectedLegendDate] = useState(null);
   const [currentTimeCursor, setCurrentTimeCursor] = useState('2026-10-23 23:59:00');
   const [isCumulative, setIsCumulative] = useState(true);
+
+  // Toggle clean full screen map mode
+  const handleToggleHideUI = useCallback(() => {
+    setHideUI((prev) => {
+      const next = !prev;
+      if (next) {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      } else {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+      return next;
+    });
+  }, []);
+
+  // Listen to fullscreen changes and Escape key
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setHideUI(false);
+      }
+    };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setHideUI(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
 
   // Data states
   const [rawHotspots, setRawHotspots] = useState([]);
@@ -157,17 +197,34 @@ export default function HomePage() {
 
   return (
     <main style={styles.main}>
-      {/* Top Header with Layer Mode Selector */}
-      <Header
-        totalHotspots={displayedHotspots.length}
-        firmsCount={firmsCount}
-        sipongiCount={sipongiCount}
-        activeMapType={activeMapType}
-        onSelectMapType={setActiveMapType}
-        layerMode={layerMode}
-        onSelectLayerMode={setLayerMode}
-        dbStats={dbStats}
-      />
+      {/* Floating Restore UI Button (saat mode Peta Penuh / hideUI) */}
+      {hideUI && (
+        <button
+          id="btn-restore-ui"
+          onClick={handleToggleHideUI}
+          style={styles.restoreUiBtn}
+          className="glass-panel"
+          title="Tampilkan Kembali Semua Panel (Esc)"
+        >
+          <Eye size={15} color="#ff4500" />
+          <span>Tampilkan Panel Antarmuka</span>
+        </button>
+      )}
+
+      {/* Top Header with Layer Mode Selector & Fullscreen Toggle */}
+      {!hideUI && (
+        <Header
+          totalHotspots={displayedHotspots.length}
+          firmsCount={firmsCount}
+          sipongiCount={sipongiCount}
+          activeMapType={activeMapType}
+          onSelectMapType={setActiveMapType}
+          layerMode={layerMode}
+          onSelectLayerMode={setLayerMode}
+          onToggleHideUI={handleToggleHideUI}
+          dbStats={dbStats}
+        />
+      )}
 
       {/* Main OpenLayers Map Canvas with Heatmap Density Layer */}
       <MapView
@@ -176,37 +233,44 @@ export default function HomePage() {
         activeMapType={activeMapType}
         layerMode={layerMode}
         onSelectLayerMode={setLayerMode}
+        hideUI={hideUI}
       />
 
       {/* Left Filter Panel (Date & Hour Filter) */}
-      <FilterPanel
-        startTime={startTime}
-        endTime={endTime}
-        source={source}
-        onApplyFilter={handleApplyFilter}
-        isLoading={isLoading}
-        minTimeBound={minTimeBound}
-        maxTimeBound={maxTimeBound}
-      />
+      {!hideUI && (
+        <FilterPanel
+          startTime={startTime}
+          endTime={endTime}
+          source={source}
+          onApplyFilter={handleApplyFilter}
+          isLoading={isLoading}
+          minTimeBound={minTimeBound}
+          maxTimeBound={maxTimeBound}
+        />
+      )}
 
       {/* Bottom Timeline Animation Slider */}
-      <TimeSlider
-        minTime={startTime || minTimeBound}
-        maxTime={endTime || maxTimeBound}
-        currentTime={currentTimeCursor}
-        onTimeChange={setCurrentTimeCursor}
-        isCumulative={isCumulative}
-        onToggleCumulative={() => setIsCumulative(!isCumulative)}
-      />
+      {!hideUI && (
+        <TimeSlider
+          minTime={startTime || minTimeBound}
+          maxTime={endTime || maxTimeBound}
+          currentTime={currentTimeCursor}
+          onTimeChange={setCurrentTimeCursor}
+          isCumulative={isCumulative}
+          onToggleCumulative={() => setIsCumulative(!isCumulative)}
+        />
+      )}
 
       {/* Bottom-Right Date & Color Legend + Density Scale */}
-      <Legend
-        dateColorMap={dateColorMap}
-        dateStats={dateStats}
-        selectedDate={selectedLegendDate}
-        onSelectDate={setSelectedLegendDate}
-        layerMode={layerMode}
-      />
+      {!hideUI && (
+        <Legend
+          dateColorMap={dateColorMap}
+          dateStats={dateStats}
+          selectedDate={selectedLegendDate}
+          onSelectDate={setSelectedLegendDate}
+          layerMode={layerMode}
+        />
+      )}
     </main>
   );
 }
@@ -218,5 +282,26 @@ const styles = {
     height: '100vh',
     overflow: 'hidden',
     backgroundColor: '#0b0f19',
+  },
+  restoreUiBtn: {
+    position: 'absolute',
+    top: '20px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    zIndex: 100,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 20px',
+    borderRadius: '30px',
+    color: '#f8fafc',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 69, 0, 0.35)',
+    border: '1px solid rgba(255, 69, 0, 0.5)',
+    background: 'rgba(15, 23, 42, 0.92)',
+    backdropFilter: 'blur(16px)',
+    transition: 'all 0.2s ease',
   },
 };

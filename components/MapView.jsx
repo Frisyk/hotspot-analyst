@@ -42,6 +42,7 @@ export default function MapView({
   activeMapType = 'dark',
   layerMode = 'both', // 'both' | 'heatmap' | 'points'
   onSelectLayerMode,
+  hideUI = false,
   onSelectHotspot,
 }) {
   const mapElementRef = useRef(null);
@@ -288,37 +289,39 @@ export default function MapView({
       <div ref={mapElementRef} style={styles.mapElement} />
 
       {/* Floating Map Controls */}
-      <div style={styles.mapControls}>
-        <button
-          id="btn-fit-extent"
-          onClick={handleFitExtent}
-          style={styles.controlIconBtn}
-          title="Fokuskan Peta ke Seluruh Titik Api"
-        >
-          <Maximize2 size={16} />
-        </button>
+      {!hideUI && (
+        <div style={styles.mapControls}>
+          <button
+            id="btn-fit-extent"
+            onClick={handleFitExtent}
+            style={styles.controlIconBtn}
+            title="Fokuskan Peta ke Seluruh Titik Api"
+          >
+            <Maximize2 size={16} />
+          </button>
 
-        <button
-          id="btn-toggle-density-settings"
-          onClick={() => setShowDensityControls(!showDensityControls)}
-          style={{
-            ...styles.controlIconBtn,
-            background: showDensityControls ? '#ff4500' : 'rgba(18, 24, 38, 0.85)',
-            borderColor: showDensityControls ? '#ff4500' : 'rgba(255, 255, 255, 0.1)',
-            boxShadow: showDensityControls ? '0 0 12px rgba(255, 69, 0, 0.5)' : 'none',
-          }}
-          title="Pengaturan Layer Kepadatan / Densitas Heatmap"
-        >
-          <Activity size={16} />
-        </button>
-      </div>
+          <button
+            id="btn-toggle-density-settings"
+            onClick={() => setShowDensityControls(!showDensityControls)}
+            style={{
+              ...styles.controlIconBtn,
+              background: showDensityControls ? '#ff4500' : 'rgba(18, 24, 38, 0.85)',
+              borderColor: showDensityControls ? '#ff4500' : 'rgba(255, 255, 255, 0.1)',
+              boxShadow: showDensityControls ? '0 0 12px rgba(255, 69, 0, 0.5)' : 'none',
+            }}
+            title="Pengaturan Layer Kepadatan / Densitas Heatmap"
+          >
+            <Activity size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Floating Density / Heatmap Settings Panel */}
       <div
         id="density-settings-panel"
         style={{
           ...styles.densityPanel,
-          display: showDensityControls ? 'flex' : 'none',
+          display: !hideUI && showDensityControls ? 'flex' : 'none',
         }}
         className="glass-panel"
       >
