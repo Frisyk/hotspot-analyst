@@ -20,8 +20,8 @@ export default function HomePage() {
   const [endTime, setEndTime] = useState('2026-10-23T23:59');
   const [source, setSource] = useState('all');
 
-  // Interactive UI states (osm, hitam, topografi)
-  const [activeMapType, setActiveMapType] = useState('hitam');
+  // Interactive UI states (basemaps including 3D terrain/relief)
+  const [activeMapType, setActiveMapType] = useState('dark');
   // Visual layer mode: 'both' (Gabungan), 'heatmap' (Densitas), 'points' (Titik Api)
   const [layerMode, setLayerMode] = useState('both');
   // Hide UI / Clean full screen map mode
@@ -231,6 +231,7 @@ export default function HomePage() {
         hotspots={displayedHotspots}
         dateColorMap={dateColorMap}
         activeMapType={activeMapType}
+        onSelectMapType={setActiveMapType}
         layerMode={layerMode}
         onSelectLayerMode={setLayerMode}
         hideUI={hideUI}

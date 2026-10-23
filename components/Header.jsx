@@ -2,23 +2,19 @@
 
 import React from 'react';
 import { Flame, Layers, Radio, EyeOff } from 'lucide-react';
+import BasemapSelector from './BasemapSelector';
 
 export default function Header({
   totalHotspots = 0,
   firmsCount = 0,
   sipongiCount = 0,
-  activeMapType = 'hitam',
+  activeMapType = 'dark',
   onSelectMapType,
   layerMode = 'both',
   onSelectLayerMode,
   onToggleHideUI,
   dbStats = null,
 }) {
-  const mapOptions = [
-    { id: 'osm', label: 'OSM' },
-    { id: 'hitam', label: 'Hitam' },
-    { id: 'topografi', label: 'Topografi' },
-  ];
 
   return (
     <header style={styles.header} className="glass-panel">
@@ -101,37 +97,11 @@ export default function Header({
           </div>
         </div>
 
-        {/* Base Map Selector (OSM, Hitam, Topografi) */}
-        <div style={styles.baseMapContainer}>
-          <div style={styles.baseMapLabel}>
-            <Layers size={13} color="#94a3b8" />
-            <span>Peta:</span>
-          </div>
-          <div style={styles.baseMapGroup}>
-            {mapOptions.map((opt) => {
-              const isActive =
-                activeMapType === opt.id ||
-                (opt.id === 'hitam' && activeMapType === 'dark');
-
-              return (
-                <button
-                  key={opt.id}
-                  onClick={() => onSelectMapType && onSelectMapType(opt.id)}
-                  style={{
-                    ...styles.baseMapBtn,
-                    background: isActive ? '#ff4500' : 'rgba(255, 255, 255, 0.05)',
-                    color: isActive ? '#ffffff' : '#94a3b8',
-                    borderColor: isActive ? '#ff4500' : 'rgba(255, 255, 255, 0.1)',
-                    boxShadow: isActive ? '0 0 10px rgba(255, 69, 0, 0.4)' : 'none',
-                  }}
-                  title={`Ganti peta dasar ke ${opt.label}`}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        {/* Basemap Selector with 3D Elevation / Terrain Options */}
+        <BasemapSelector
+          activeMapType={activeMapType}
+          onSelectMapType={onSelectMapType}
+        />
 
         {/* Tombol Peta Penuh / Sembunyikan UI */}
         <button

@@ -1,0 +1,108 @@
+export const BASEMAPS = [
+  {
+    id: "google_hybrid",
+    name: "Google Hybrid",
+    thumbnail: "https://mt1.google.com/vt/lyrs=y&x=50&y=32&z=6",
+    url: "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+    attributions: "&copy; Google",
+    category: "satellite",
+    is3D: false,
+  },
+  {
+    id: "google_terrain",
+    name: "Google Terrain 3D",
+    thumbnail: "https://mt1.google.com/vt/lyrs=p&x=50&y=32&z=6",
+    url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
+    attributions: "&copy; Google",
+    category: "3d",
+    is3D: true,
+  },
+  {
+    id: "opentopomap",
+    name: "OpenTopo 3D Elevation",
+    thumbnail: "https://c.tile.opentopomap.org/6/50/32.png",
+    url: "https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    attributions: 'Map data: © <a href="https://openstreetmap.org">OSM</a>, <a href="http://viewfinderpanoramas.org">SRTM</a> | Style: © <a href="https://opentopomap.org">OpenTopoMap</a>',
+    category: "3d",
+    is3D: true,
+  },
+  {
+    id: "esri_hillshade",
+    name: "Esri Shaded Relief 3D",
+    thumbnail: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/6/32/50",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
+    attributions: "Tiles © Esri, USGS, NGA, NASA, CGIAR, NCEAS, NLS, OS, NMA, Geodatastyrelsen",
+    category: "3d",
+    is3D: true,
+  },
+  {
+    id: "osm",
+    name: "OpenStreetMap",
+    thumbnail: "https://tile.openstreetmap.org/6/50/32.png",
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    category: "streets",
+    is3D: false,
+  },
+  {
+    id: "satellite",
+    name: "Satellite (Esri)",
+    thumbnail:
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/6/32/50",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attributions:
+      'Tiles © <a href="https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer">ArcGIS</a>',
+    category: "satellite",
+    is3D: false,
+  },
+  {
+    id: "terrain",
+    name: "Terrain Topo (Esri)",
+    thumbnail:
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/6/32/50",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+    attributions:
+      'Tiles © <a href="https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer">ArcGIS</a>',
+    category: "topo",
+    is3D: false,
+  },
+  {
+    id: "positron",
+    name: "Positron (Light)",
+    thumbnail:
+      "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/6/50/32.png",
+    url: "https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png",
+    attributions:
+      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+    category: "monochrome",
+    is3D: false,
+  },
+  {
+    id: "dark",
+    name: "Dark Matter",
+    thumbnail:
+      "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/6/50/32.png",
+    url: "https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/{z}/{x}/{y}.png",
+    attributions:
+      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="http://cartodb.com/attributions">CartoDB</a>',
+    category: "monochrome",
+    is3D: false,
+  },
+  {
+    id: "google_roadmap",
+    name: "Google Roadmap",
+    thumbnail: "https://mt1.google.com/vt/lyrs=m&x=50&y=32&z=6",
+    url: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
+    attributions: "&copy; Google",
+    category: "streets",
+    is3D: false,
+  },
+];
+
+export function getBasemapConfig(id) {
+  if (!id) return BASEMAPS.find((b) => b.id === 'dark') || BASEMAPS[0];
+  // Backward compatibility for 'hitam' or 'topografi'
+  if (id === 'hitam') return BASEMAPS.find((b) => b.id === 'dark') || BASEMAPS[0];
+  if (id === 'topografi') return BASEMAPS.find((b) => b.id === 'opentopomap') || BASEMAPS[0];
+  return BASEMAPS.find((b) => b.id === id) || BASEMAPS.find((b) => b.id === 'dark') || BASEMAPS[0];
+}

@@ -15,31 +15,13 @@ import { Style, Circle as CircleStyle, Fill, Stroke } from 'ol/style';
 import Overlay from 'ol/Overlay';
 import { Maximize2, Flame, Activity, Sliders, X, Layers } from 'lucide-react';
 import { hexToRgba, getColorForDate } from '../utils/colorPalette';
-
-const CARTO_API_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY || 'cb1_4rl4_1_b877170eaa644026e39b00c0';
-
-const BASE_MAP_URLS = {
-  osm: {
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
-  },
-  hitam: {
-    url: `https://basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=${CARTO_API_KEY}`,
-    attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
-  },
-  topografi: {
-    url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)',
-    maxZoom: 17,
-  },
-};
+import { getBasemapConfig } from '../utils/basemaps';
 
 export default function MapView({
   hotspots = [],
   dateColorMap = {},
   activeMapType = 'dark',
+  onSelectMapType,
   layerMode = 'both', // 'both' | 'heatmap' | 'points'
   onSelectLayerMode,
   hideUI = false,
@@ -133,10 +115,14 @@ export default function MapView({
     heatmapLayer.setVisible(layerMode === 'both' || layerMode === 'heatmap');
     vectorLayer.setVisible(layerMode === 'both' || layerMode === 'points');
 
-    // 3. Base tile layer (OSM, Hitam, Topografi)
-    const initKey = activeMapType === 'dark' ? 'hitam' : (activeMapType || 'hitam');
+    // 3. Base tile layer (Google 3D Terrain, OpenTopo 3D, Esri Relief, Dark Matter, etc.)
+    const baseConfig = getBasemapConfig(activeMapType);
     const baseLayer = new TileLayer({
-      source: new XYZ(BASE_MAP_URLS[initKey] || BASE_MAP_URLS.hitam),
+      source: new XYZ({
+        url: baseConfig.url,
+        attributions: baseConfig.attributions,
+        maxZoom: 19,
+      }),
     });
     baseLayerRef.current = baseLayer;
 
@@ -211,12 +197,17 @@ export default function MapView({
     };
   }, []);
 
-  // Update Base Layer when activeMapType changes (osm, hitam, topografi)
+  // Update Base Layer when activeMapType changes
   useEffect(() => {
     if (!baseLayerRef.current) return;
-    const key = activeMapType === 'dark' ? 'hitam' : (activeMapType || 'hitam');
-    const cfg = BASE_MAP_URLS[key] || BASE_MAP_URLS.hitam;
-    baseLayerRef.current.setSource(new XYZ(cfg));
+    const baseConfig = getBasemapConfig(activeMapType);
+    baseLayerRef.current.setSource(
+      new XYZ({
+        url: baseConfig.url,
+        attributions: baseConfig.attributions,
+        maxZoom: 19,
+      })
+    );
   }, [activeMapType]);
 
   // Sync layerMode with layers visibility
