@@ -467,24 +467,34 @@ export default function MapView({
   const handleClick = useCallback((info) => {
     const ds = datasetRef.current;
     const map = mapRef.current;
-    if (!ds || !map || info.index == null || info.index < 0) {
+    if (!ds || !map) return;
+
+    let idx = info?.index;
+    let idxs = [];
+
+    if (info && info.x != null && info.y != null) {
+      try {
+        const multi = overlayRef.current?.pickMultipleObjects({
+          x: info.x, y: info.y, radius: 14, depth: 10,
+        });
+        if (multi && multi.length) {
+          idxs = multi.map((m) => m.index).filter((i) => i != null && i >= 0);
+          if (idxs.length) idx = idxs[0];
+        }
+      } catch (e) {}
+    }
+
+    if (idx == null || idx < 0) {
       setSelectedHotspot(null);
       return;
     }
+    if (idxs.length === 0) idxs = [idx];
 
     const d = ds.decoded;
     const hdr = d.header;
     const t0 = hdr.t0Min;
     const isGrid = hdr.tier === 'grid';
     const cell = hdr.cell;
-
-    let idxs = [info.index];
-    try {
-      const multi = overlayRef.current?.pickMultipleObjects({
-        x: info.x, y: info.y, radius: 8, depth: 10, layerIds: [info.layer.id],
-      });
-      if (multi && multi.length) idxs = multi.map((m) => m.index);
-    } catch (e) { /* picking ganda opsional */ }
 
     const first = idxs[0];
     const lon = d.lonlat[first * 2];
@@ -684,6 +694,7 @@ export default function MapView({
           minHour={timeBounds.minHour}
           maxHour={timeBounds.maxHour}
           width={containerRef.current?.clientWidth || 0}
+          onOpenDetail={(detailData) => setSelectedHotspot(detailData)}
         />
       )}
 
@@ -756,7 +767,7 @@ export default function MapView({
   );
 }
 
-function HoverCard({ hover, ds, minHour, maxHour, width }) {
+function HoverCard({ hover, ds, minHour, maxHour, width, onOpenDetail }) {
   const d = ds.decoded;
   const hdr = d.header;
   const t0 = hdr.t0Min;
@@ -767,7 +778,7 @@ function HoverCard({ hover, ds, minHour, maxHour, width }) {
   const rows = idxs.map((i) => {
     total += d.cnt[i];
     if (d.bright[i] > maxBright) maxBright = d.bright[i];
-    const [name, kind] = hdr.sensors[d.sensor[i]] || ['?', 0];
+    const [name, kind] = hdr.sensors[d.sensor[i]] || ['FIRMS', 0];
     return { i, min: t0 + d.tRel[i], cnt: d.cnt[i], bright: d.bright[i], name, kind };
   });
   rows.sort((a, b) => a.min - b.min);
@@ -781,8 +792,46 @@ function HoverCard({ hover, ds, minHour, maxHour, width }) {
 
   const left = width && hover.x + 18 > width - 270 ? hover.x - 262 : hover.x + 16;
 
+  const handleClickCard = () => {
+    if (!onOpenDetail) return;
+    const mappedRows = rows.map((r) => {
+      const [sensorName, kind] = hdr.sensors[d.sensor[r.i]] || ['FIRMS', 0];
+      const conf = hdr.conf[d.conf[r.i]] || '-';
+      const prov = hdr.prov[d.prov[r.i]] || 'Kalimantan';
+      const ptHour = Math.floor(r.min / 60);
+      return {
+        i: r.i,
+        min: r.min,
+        cnt: r.cnt,
+        bright: r.bright,
+        sensorName,
+        kind,
+        conf,
+        prov,
+        color: getColorForHour(ptHour, minHour, maxHour),
+      };
+    }).reverse();
+
+    onOpenDetail({
+      lon,
+      lat,
+      isGrid,
+      cell: hdr.cell,
+      rows: mappedRows,
+      totalCnt: total,
+      maxBright,
+      elevation: null,
+      color: accent,
+    });
+  };
+
   return (
-    <div className="hover-card" style={{ left, top: hover.y + 14 }}>
+    <div
+      className="hover-card"
+      style={{ left, top: hover.y + 14, cursor: 'pointer' }}
+      onClick={handleClickCard}
+      title="Klik untuk melihat detail lengkap titik ini"
+    >
       <div className="hc-head">
         <span className="hc-swatch" style={{ background: accent }} />
         <span className="hc-title">{isGrid ? 'Sel agregat' : 'Hotspot'}</span>
@@ -804,7 +853,7 @@ function HoverCard({ hover, ds, minHour, maxHour, width }) {
         })}
       </ul>
       {rows.length > 5 && <div className="hc-more">+ {rows.length - 5} deteksi lain di titik ini</div>}
-      <div className="hc-foot">Klik untuk {isGrid ? 'masuk ke area ini' : 'fokus'}</div>
+      <div className="hc-foot">Klik untuk detail lengkap ↗</div>
     </div>
   );
 }
