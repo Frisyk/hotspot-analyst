@@ -1,8 +1,8 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'Fire Hotspot Visualizer | Kalimantan Monitoring',
-  description: 'Interactive OpenLayers map visualizing FIRMS & SIPONGI fire hotspot alerts with date-time hour filtering and dynamic date-based color coding.',
+  title: 'Titik Api — Pantau Hotspot Kalimantan',
+  description: 'Peta interaktif hotspot NASA FIRMS & KLHK SIPONGI untuk Kalimantan: ratusan ribu titik dirender di GPU, animasi per jam, dan medan 3D.',
 };
 
 export default function RootLayout({ children }) {

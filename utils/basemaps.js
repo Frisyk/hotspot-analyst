@@ -13,30 +13,30 @@ export const BASEMAPS = [
   },
   {
     id: "google_terrain",
-    name: "Google Terrain 3D",
+    name: "Google Terrain",
     thumbnail: "https://mt1.google.com/vt/lyrs=p&x=50&y=32&z=6",
     url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}",
     attributions: "&copy; Google",
-    category: "3d",
-    is3D: true,
+    category: "relief",
+    relief: true,
   },
   {
     id: "opentopomap",
-    name: "OpenTopo 3D Elevation",
+    name: "OpenTopo",
     thumbnail: "https://c.tile.opentopomap.org/6/50/32.png",
     url: "https://{a-c}.tile.opentopomap.org/{z}/{x}/{y}.png",
     attributions: 'Map data: © <a href="https://openstreetmap.org">OSM</a>, <a href="http://viewfinderpanoramas.org">SRTM</a> | Style: © <a href="https://opentopomap.org">OpenTopoMap</a>',
-    category: "3d",
-    is3D: true,
+    category: "relief",
+    relief: true,
   },
   {
     id: "esri_hillshade",
-    name: "Esri Shaded Relief 3D",
+    name: "Esri Hillshade",
     thumbnail: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/6/32/50",
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
     attributions: "Tiles © Esri, USGS, NGA, NASA, CGIAR, NCEAS, NLS, OS, NMA, Geodatastyrelsen",
-    category: "3d",
-    is3D: true,
+    category: "relief",
+    relief: true,
   },
   {
     id: "osm",
@@ -45,7 +45,6 @@ export const BASEMAPS = [
     url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     category: "streets",
-    is3D: false,
   },
   {
     id: "satellite",
@@ -56,7 +55,6 @@ export const BASEMAPS = [
     attributions:
       'Tiles © <a href="https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer">ArcGIS</a>',
     category: "satellite",
-    is3D: false,
   },
   {
     id: "terrain",
@@ -67,7 +65,6 @@ export const BASEMAPS = [
     attributions:
       'Tiles © <a href="https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer">ArcGIS</a>',
     category: "topo",
-    is3D: false,
   },
   {
     id: "positron",
@@ -77,7 +74,6 @@ export const BASEMAPS = [
     attributions:
       '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     category: "monochrome",
-    is3D: false,
   },
   {
     id: "dark",
@@ -87,7 +83,6 @@ export const BASEMAPS = [
     attributions:
       '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     category: "monochrome",
-    is3D: false,
   },
   {
     id: "google_roadmap",
@@ -96,7 +91,6 @@ export const BASEMAPS = [
     url: "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
     attributions: "&copy; Google",
     category: "streets",
-    is3D: false,
   },
 ];
 
@@ -106,4 +100,15 @@ export function getBasemapConfig(id) {
   if (id === 'hitam') return BASEMAPS.find((b) => b.id === 'dark') || BASEMAPS[0];
   if (id === 'topografi') return BASEMAPS.find((b) => b.id === 'opentopomap') || BASEMAPS[0];
   return BASEMAPS.find((b) => b.id === id) || BASEMAPS.find((b) => b.id === 'dark') || BASEMAPS[0];
+}
+
+/** MapLibre tidak mengenal pola subdomain `{a-c}`; ubah jadi daftar URL. */
+export function expandTileUrls(url) {
+  const m = url.match(/\{([a-z])-([a-z])\}/);
+  if (!m) return [url];
+  const out = [];
+  for (let c = m[1].charCodeAt(0); c <= m[2].charCodeAt(0); c++) {
+    out.push(url.replace(m[0], String.fromCharCode(c)));
+  }
+  return out;
 }

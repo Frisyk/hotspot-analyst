@@ -1,254 +1,47 @@
 'use client';
 
 import React from 'react';
-import { Calendar, Check, Flame, Activity } from 'lucide-react';
-import { hexToRgba } from '../utils/colorPalette';
+import { getColorForDate } from '../utils/colorPalette';
 
 export default function Legend({
   dateColorMap = {},
   dateStats = {},
   selectedDate = null,
   onSelectDate,
-  layerMode = 'both',
 }) {
   const dates = Object.keys(dateStats).sort();
-
-  if (dates.length === 0) {
-    return null;
-  }
-
-  const showHeatmapScale = layerMode === 'both' || layerMode === 'heatmap';
+  if (dates.length === 0) return null;
+  const max = Math.max(...dates.map((d) => dateStats[d]), 1);
 
   return (
-    <div style={styles.legendContainer} className="glass-panel">
-      <div style={styles.header}>
-        <div style={styles.headerTitle}>
-          <Calendar size={14} color="#f97316" />
-          <span>Legenda Tanggal & Warna</span>
-        </div>
+    <aside className="legend" aria-label="Legenda tanggal">
+      <div className="legend-head">
+        <span className="legend-title">Tanggal · {dates.length}</span>
         {selectedDate && (
-          <button
-            onClick={() => onSelectDate(null)}
-            style={styles.clearFilterBtn}
-            title="Tampilkan semua tanggal"
-          >
-            Reset
-          </button>
+          <button className="legend-reset" onClick={() => onSelectDate(null)}>Semua</button>
         )}
       </div>
 
-      <div style={styles.list}>
-        {dates.map((dateStr) => {
-          const color = dateColorMap[dateStr] || '#FF4500';
-          const count = dateStats[dateStr] || 0;
-          const isSelected = selectedDate === dateStr;
-
+      <div className="legend-list">
+        {dates.map((d) => {
+          const color = getColorForDate(d, dateColorMap);
+          const on = selectedDate === d;
           return (
-            <div
-              key={dateStr}
-              onClick={() => onSelectDate(isSelected ? null : dateStr)}
-              style={{
-                ...styles.item,
-                background: isSelected ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
-                borderColor: isSelected ? color : 'transparent',
-              }}
-              title={`Klik untuk filter tanggal ${dateStr}`}
+            <button
+              key={d}
+              className={`legend-row${selectedDate && !on ? ' dim' : ''}`}
+              aria-pressed={on}
+              onClick={() => onSelectDate(on ? null : d)}
+              title={`Isolasi ${d}`}
             >
-              <div style={styles.swatchWrapper}>
-                <div
-                  style={{
-                    ...styles.swatchGlow,
-                    backgroundColor: hexToRgba(color, 0.4),
-                  }}
-                />
-                <div
-                  style={{
-                    ...styles.swatchInner,
-                    backgroundColor: color,
-                  }}
-                />
-              </div>
-
-              <div style={styles.itemInfo}>
-                <span style={styles.dateLabel}>{dateStr}</span>
-                <span style={styles.countBadge}>{count} titik</span>
-              </div>
-
-              {isSelected && (
-                <div style={{ ...styles.checkBadge, color }}>
-                  <Check size={12} />
-                </div>
-              )}
-            </div>
+              <span className="legend-sw" style={{ background: color }} />
+              <span className="legend-date">{d}</span>
+              <span className="legend-n">{dateStats[d].toLocaleString('id-ID')}</span>
+              <span className="legend-bar" style={{ background: color, width: `${(dateStats[d] / max) * 100}%` }} />
+            </button>
           );
         })}
       </div>
-
-      {/* Skala Kepadatan Titik Api (Heatmap Density) */}
-      {showHeatmapScale && (
-        <div style={styles.densitySection}>
-          <div style={styles.densityHeader}>
-            <Flame size={12} color="#ff4500" />
-            <span>Skala Densitas Hotspot</span>
-          </div>
-          <div style={styles.densityGradientBar} />
-          <div style={styles.densityScaleLabels}>
-            <span>Rendah</span>
-            <span>Sedang</span>
-            <span>Tinggi (Tumpuk)</span>
-          </div>
-        </div>
-      )}
-
-      <div style={styles.footerNote}>
-        {layerMode === 'heatmap'
-          ? 'Area merah/putih menandakan beberapa titik api terdeteksi di lokasi sama atau berdekatan.'
-          : layerMode === 'both'
-          ? 'Menampilkan layer kepadatan (densitas) bersama marker titik api kronologis.'
-          : 'Titik diberi warna berbeda sesuai tanggal kejadian untuk memudahkan tracking kronologis.'}
-      </div>
-    </div>
+    </aside>
   );
 }
-
-const styles = {
-  legendContainer: {
-    position: 'absolute',
-    bottom: '24px',
-    right: '20px',
-    zIndex: 90,
-    width: '240px',
-    maxHeight: '400px',
-    padding: '14px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: '8px',
-    borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-  },
-  headerTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '12px',
-    fontWeight: '700',
-    color: '#e2e8f0',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-  },
-  clearFilterBtn: {
-    background: 'rgba(239, 68, 68, 0.2)',
-    border: '1px solid rgba(239, 68, 68, 0.4)',
-    color: '#fca5a5',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontSize: '10px',
-    fontWeight: '600',
-    cursor: 'pointer',
-  },
-  list: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '6px',
-    overflowY: 'auto',
-    maxHeight: '160px',
-    paddingRight: '4px',
-  },
-  item: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '5px 8px',
-    borderRadius: '8px',
-    border: '1px solid transparent',
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-  },
-  swatchWrapper: {
-    position: 'relative',
-    width: '18px',
-    height: '18px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swatchGlow: {
-    position: 'absolute',
-    width: '18px',
-    height: '18px',
-    borderRadius: '50%',
-    filter: 'blur(2px)',
-  },
-  swatchInner: {
-    position: 'relative',
-    width: '10px',
-    height: '10px',
-    borderRadius: '50%',
-    border: '1.5px solid #ffffff',
-  },
-  itemInfo: {
-    flex: 1,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dateLabel: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: '#f1f5f9',
-    fontFamily: 'var(--font-mono)',
-  },
-  countBadge: {
-    fontSize: '11px',
-    color: '#94a3b8',
-    background: 'rgba(255, 255, 255, 0.06)',
-    padding: '1px 6px',
-    borderRadius: '4px',
-  },
-  checkBadge: {
-    display: 'flex',
-    alignItems: 'center',
-  },
-  densitySection: {
-    paddingTop: '6px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
-  densityHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '11px',
-    fontWeight: '700',
-    color: '#cbd5e1',
-    textTransform: 'uppercase',
-  },
-  densityGradientBar: {
-    height: '8px',
-    borderRadius: '4px',
-    background: 'linear-gradient(to right, #0000ff, #00ffff, #00ff00, #ffff00, #ff8800, #ff0000, #ffffff)',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    boxShadow: '0 0 8px rgba(255, 69, 0, 0.25)',
-  },
-  densityScaleLabels: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '9px',
-    color: '#94a3b8',
-    fontWeight: '600',
-  },
-  footerNote: {
-    fontSize: '10px',
-    color: '#64748b',
-    lineHeight: '1.4',
-    paddingTop: '6px',
-    borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-  },
-};

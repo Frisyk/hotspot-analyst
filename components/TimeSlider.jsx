@@ -1,27 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, FastForward, Clock } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { FastForward, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
+import { dateOfHour, formatDay, formatWall, parseWall } from '../utils/timeUtils';
+import { getColorForDate } from '../utils/colorPalette';
 
-function parseLocalDate(str) {
-  if (!str) return new Date();
-  const clean = String(str).replace('T', ' ');
-  const [datePart, timePart = '00:00:00'] = clean.split(' ');
-  const [y, m, d] = (datePart || '2026-10-23').split('-').map(Number);
-  const [hh = 0, mm = 0, ss = 0] = timePart.split(':').map(Number);
-  return new Date(y, m - 1, d, hh, mm, ss);
-}
-
-function formatLocalYMDHMS(date) {
-  const pad = (n) => String(n).padStart(2, '0');
-  const y = date.getFullYear();
-  const m = pad(date.getMonth() + 1);
-  const d = pad(date.getDate());
-  const hh = pad(date.getHours());
-  const mm = pad(date.getMinutes());
-  const ss = pad(date.getSeconds());
-  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
-}
+const MAX_BINS = 360;
 
 export default function TimeSlider({
   minTime,
@@ -30,262 +14,163 @@ export default function TimeSlider({
   onTimeChange,
   isCumulative = true,
   onToggleCumulative,
+  hourly = null, // { hr0, total: number[] }
+  dateColorMap = {},
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1); // 1x, 2x, 4x
-  const intervalRef = useRef(null);
+  const [speed, setSpeed] = useState(1);
 
-  // Compute total hours between min and max
-  const minDate = minTime ? parseLocalDate(minTime) : parseLocalDate('2026-10-21 00:00:00');
-  const maxDate = maxTime ? parseLocalDate(maxTime) : parseLocalDate('2026-10-23 23:59:59');
+  const minMs = parseWall(minTime) || 0;
+  const maxMs = parseWall(maxTime) || minMs + 3600000;
+  const totalHours = Math.max(1, Math.round((maxMs - minMs) / 3600000));
+  const curMs = currentTime ? parseWall(currentTime) : maxMs;
+  const offset = Math.min(totalHours, Math.max(0, Math.round((curMs - minMs) / 3600000)));
+  const startHr = Math.floor(minMs / 3600000);
 
-  const totalHours = Math.max(
-    1,
-    Math.round((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60))
-  );
+  const offRef = useRef(offset);
+  offRef.current = offset;
 
-  const curDate = currentTime ? parseLocalDate(currentTime) : maxDate;
-  const currentHourOffset = Math.min(
-    totalHours,
-    Math.max(0, Math.round((curDate.getTime() - minDate.getTime()) / (1000 * 60 * 60)))
-  );
+  const setOffset = (h) => onTimeChange(formatWall(minMs + h * 3600000));
 
-  const handleSliderChange = (e) => {
-    const hours = parseInt(e.target.value, 10);
-    const target = new Date(minDate.getTime() + hours * 60 * 60 * 1000);
-    onTimeChange(formatLocalYMDHMS(target));
-  };
-
-  // Animation loop
+  // ---------- animasi per jam ----------
   useEffect(() => {
-    if (isPlaying) {
-      intervalRef.current = setInterval(() => {
-        const nextHour = (currentHourOffset + 1);
-        if (nextHour > totalHours) {
-          // Loop back to start
-          const target = new Date(minDate.getTime());
-          onTimeChange(formatLocalYMDHMS(target));
-        } else {
-          const target = new Date(minDate.getTime() + nextHour * 60 * 60 * 1000);
-          onTimeChange(formatLocalYMDHMS(target));
-        }
-      }, 1000 / speed);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isPlaying, currentHourOffset, totalHours, speed, minDate]);
+    if (!isPlaying) return undefined;
+    const id = setInterval(() => {
+      const next = offRef.current + 1 > totalHours ? 0 : offRef.current + 1;
+      onTimeChange(formatWall(minMs + next * 3600000));
+    }, 1000 / speed);
+    return () => clearInterval(id);
+  }, [isPlaying, speed, totalHours, minMs, onTimeChange]);
 
   const togglePlay = () => {
-    if (!isPlaying && currentHourOffset >= totalHours) {
-      onTimeChange(formatLocalYMDHMS(minDate));
-    }
+    if (!isPlaying && offset >= totalHours) setOffset(0);
     setIsPlaying(!isPlaying);
   };
 
-  const stepBack = () => {
-    const prev = Math.max(0, currentHourOffset - 1);
-    const target = new Date(minDate.getTime() + prev * 60 * 60 * 1000);
-    onTimeChange(formatLocalYMDHMS(target));
-  };
+  // ---------- histogram jam ----------
+  const bars = useMemo(() => {
+    const bins = Math.min(totalHours + 1, MAX_BINS);
+    const per = Math.ceil((totalHours + 1) / bins);
+    const out = [];
+    let max = 0;
+    for (let b = 0; b < bins; b++) {
+      let sum = 0;
+      for (let k = 0; k < per; k++) {
+        const idx = startHr + b * per + k - (hourly?.hr0 ?? 0);
+        if (hourly && idx >= 0 && idx < hourly.total.length) sum += hourly.total[idx];
+      }
+      out.push({ sum, endHour: (b + 1) * per - 1, date: dateOfHour(startHr + b * per) });
+      if (sum > max) max = sum;
+    }
+    return { out, max, bins, per };
+  }, [hourly, startHr, totalHours]);
 
-  const stepForward = () => {
-    const next = Math.min(totalHours, currentHourOffset + 1);
-    const target = new Date(minDate.getTime() + next * 60 * 60 * 1000);
-    onTimeChange(formatLocalYMDHMS(target));
-  };
+  // ---------- label sumbu (batas hari) ----------
+  const ticks = useMemo(() => {
+    const t = [];
+    const firstMidnight = Math.ceil(minMs / 86400000) * 86400000;
+    const days = Math.max(1, Math.floor((maxMs - firstMidnight) / 86400000) + 1);
+    const step = Math.ceil(days / 7);
+    let i = 0;
+    for (let ms = firstMidnight; ms <= maxMs; ms += 86400000, i++) {
+      if (i % step === 0) t.push({ pct: ((ms - minMs) / (maxMs - minMs)) * 100, label: formatDay(ms).slice(0, -5) });
+    }
+    return t;
+  }, [minMs, maxMs]);
 
-  const formatDisplayTime = (d) => {
-    const date = new Date(d);
-    return date.toLocaleString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const clock = new Date(curMs);
+  const hh = String(clock.getUTCHours()).padStart(2, '0');
+  const mm = String(clock.getUTCMinutes()).padStart(2, '0');
+  const playheadPct = (offset / totalHours) * 100;
+  const peakPerHour = hourly ? Math.max(0, ...hourly.total) : 0;
 
   return (
-    <div style={styles.container} className="glass-panel">
-      <div style={styles.topRow}>
-        <div style={styles.playControls}>
-          <button onClick={stepBack} style={styles.controlBtn} title="Mundur 1 Jam">
-            <SkipBack size={15} />
+    <section className="timeline" aria-label="Timeline animasi">
+      <div className="tl-left">
+        <div className="tl-clock">
+          <div className="d">{formatDay(curMs)}</div>
+          <div className="t">{hh}:{mm}<small>WIB</small></div>
+        </div>
+
+        <div className="tl-transport">
+          <button className="tl-btn" onClick={() => setOffset(Math.max(0, offset - 1))} title="Mundur 1 jam" aria-label="Mundur 1 jam">
+            <SkipBack size={14} />
           </button>
           <button
+            id="btn-play"
+            className="tl-btn play"
             onClick={togglePlay}
-            style={styles.playBtn}
-            title={isPlaying ? 'Jeda Animasi' : 'Putar Animasi Per Jam'}
+            title={isPlaying ? 'Jeda' : 'Putar per jam'}
+            aria-label={isPlaying ? 'Jeda' : 'Putar'}
           >
-            {isPlaying ? <Pause size={17} /> : <Play size={17} style={{ marginLeft: '2px' }} />}
+            {isPlaying ? <Pause size={15} /> : <Play size={15} />}
           </button>
-          <button onClick={stepForward} style={styles.controlBtn} title="Maju 1 Jam">
-            <SkipForward size={15} />
+          <button className="tl-btn" onClick={() => setOffset(Math.min(totalHours, offset + 1))} title="Maju 1 jam" aria-label="Maju 1 jam">
+            <SkipForward size={14} />
           </button>
-
           <button
-            onClick={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : 1)}
-            style={styles.speedBtn}
-            title="Ubah Kecepatan Animasi"
+            className="tl-btn tl-speed"
+            onClick={() => setSpeed(speed === 1 ? 2 : speed === 2 ? 4 : speed === 4 ? 8 : 1)}
+            title="Kecepatan animasi"
           >
-            <FastForward size={13} />
-            <span>{speed}x</span>
-          </button>
-        </div>
-
-        <div style={styles.timeDisplay}>
-          <Clock size={14} color="#f97316" />
-          <span style={styles.timeText}>{formatDisplayTime(curDate)} WIB</span>
-        </div>
-
-        <div style={styles.modeToggle}>
-          <button
-            onClick={onToggleCumulative}
-            style={{
-              ...styles.modeBtn,
-              background: isCumulative ? 'rgba(255, 69, 0, 0.25)' : 'transparent',
-              borderColor: isCumulative ? '#ff4500' : 'rgba(255, 255, 255, 0.1)',
-            }}
-            title="Akumulasi titik api dari waktu awal hingga jam ini"
-          >
-            {isCumulative ? 'Kumulatif (Sampai Jam Ini)' : 'Hanya Jam Ini'}
+            <FastForward size={12} />{speed}×
           </button>
         </div>
       </div>
 
-      <div style={styles.sliderRow}>
-        <span style={styles.boundLabel}>{formatDisplayTime(minDate).split(',')[0]}</span>
-        <input
-          type="range"
-          min={0}
-          max={totalHours}
-          value={currentHourOffset}
-          onChange={handleSliderChange}
-          style={styles.slider}
-        />
-        <span style={styles.boundLabel}>{formatDisplayTime(maxDate).split(',')[0]}</span>
+      <div className="tl-main">
+        <div className="tl-top">
+          <span className="tl-cap">Hotspot per jam{peakPerHour ? <> · puncak <b>{peakPerHour.toLocaleString('id-ID')}</b></> : null}</span>
+          <div className="seg" role="group" aria-label="Mode akumulasi">
+            <button aria-pressed={isCumulative} onClick={() => !isCumulative && onToggleCumulative()} title="Akumulasi dari awal rentang sampai jam ini">Kumulatif</button>
+            <button aria-pressed={!isCumulative} onClick={() => isCumulative && onToggleCumulative()} title="Hanya hotspot pada jam ini">Per jam</button>
+          </div>
+        </div>
+
+        <div className="tl-chart">
+          <svg viewBox={`0 0 ${bars.bins} 100`} preserveAspectRatio="none" aria-hidden="true">
+            <line x1="0" x2={bars.bins} y1="99.5" y2="99.5" stroke="var(--line-hi)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            {bars.out.map((b, i) => {
+              if (!b.sum) return null;
+              const h = Math.max(3, (b.sum / bars.max) * 96);
+              const past = isCumulative ? b.endHour <= offset + bars.per - 1 : Math.floor(offset / bars.per) === i;
+              return (
+                <rect
+                  key={i}
+                  x={i + 0.12}
+                  y={99 - h}
+                  width={0.76}
+                  height={h}
+                  fill={getColorForDate(b.date, dateColorMap)}
+                  opacity={past ? 0.95 : 0.2}
+                />
+              );
+            })}
+          </svg>
+          <div className="tl-head" style={{ left: `${playheadPct}%` }} />
+          <input
+            id="timeline-scrub"
+            className="tl-scrub"
+            type="range"
+            min={0}
+            max={totalHours}
+            value={offset}
+            onChange={(e) => setOffset(parseInt(e.target.value, 10))}
+            aria-label="Geser waktu"
+          />
+        </div>
+
+        <div className="tl-axis" aria-hidden="true">
+          <span style={{ left: 0 }}>{formatDay(minMs).slice(0, -5)}</span>
+          {ticks.map((t, i) => (
+            <React.Fragment key={i}>
+              <i style={{ left: `${t.pct}%` }} />
+              {t.pct > 6 && t.pct < 94 && <span style={{ left: `${t.pct}%` }}>{t.label}</span>}
+            </React.Fragment>
+          ))}
+          <span style={{ right: 0, left: 'auto', transform: 'none' }}>{formatDay(maxMs).slice(0, -5)}</span>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
-
-const styles = {
-  container: {
-    position: 'absolute',
-    bottom: '24px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    zIndex: 90,
-    width: 'min(700px, calc(100% - 300px))',
-    padding: '12px 20px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-  },
-  topRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    flexWrap: 'wrap',
-  },
-  playControls: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  controlBtn: {
-    background: 'rgba(255, 255, 255, 0.06)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    color: '#cbd5e1',
-    width: '32px',
-    height: '32px',
-    borderRadius: '8px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-  },
-  playBtn: {
-    background: 'linear-gradient(135deg, #ff4500, #ff8c00)',
-    border: 'none',
-    color: '#ffffff',
-    width: '36px',
-    height: '36px',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    boxShadow: '0 0 16px rgba(255, 69, 0, 0.5)',
-    transition: 'all 0.2s ease',
-  },
-  speedBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '3px',
-    background: 'rgba(255, 255, 255, 0.06)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    color: '#cbd5e1',
-    padding: '4px 8px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    fontFamily: 'var(--font-mono)',
-  },
-  timeDisplay: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    background: 'rgba(15, 23, 42, 0.8)',
-    padding: '6px 14px',
-    borderRadius: '8px',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-  },
-  timeText: {
-    fontSize: '13px',
-    fontWeight: '700',
-    color: '#f8fafc',
-    fontFamily: 'var(--font-mono)',
-    letterSpacing: '-0.01em',
-  },
-  modeToggle: {
-    display: 'flex',
-  },
-  modeBtn: {
-    border: '1px solid',
-    color: '#f1f5f9',
-    padding: '5px 10px',
-    borderRadius: '6px',
-    fontSize: '11px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  sliderRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  boundLabel: {
-    fontSize: '11px',
-    color: '#64748b',
-    fontFamily: 'var(--font-mono)',
-    whiteSpace: 'nowrap',
-  },
-  slider: {
-    flex: 1,
-    height: '6px',
-    borderRadius: '3px',
-    background: 'rgba(255, 255, 255, 0.15)',
-    outline: 'none',
-    cursor: 'pointer',
-    accentColor: '#ff4500',
-  },
-};
