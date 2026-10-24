@@ -19,6 +19,12 @@ export async function GET(request) {
   const sp = new URL(request.url).searchParams;
   const start = sp.get('start') || null;
   const end = sp.get('end') || null;
+  if (start && (start.includes('NaN') || isNaN(Date.parse(start)))) {
+    return NextResponse.json({ error: 'Invalid start parameter' }, { status: 400 });
+  }
+  if (end && (end.includes('NaN') || isNaN(Date.parse(end)))) {
+    return NextResponse.json({ error: 'Invalid end parameter' }, { status: 400 });
+  }
   const sourceParam = sp.get('source') || 'all';
   const source = ['all', 'firms', 'sipongi'].includes(sourceParam) ? sourceParam : 'all';
   const tier = sp.get('tier') === 'grid' ? 'grid' : 'raw';

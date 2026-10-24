@@ -17,12 +17,14 @@ export function parseWall(str) {
 
 /** ms -> 'YYYY-MM-DD HH:mm:ss' */
 export function formatWall(ms) {
+  if (!Number.isFinite(ms)) return '';
   const d = new Date(ms);
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
 }
 
 /** ms -> 'YYYY-MM-DDTHH:mm' (untuk input datetime-local) */
 export function formatInput(ms) {
+  if (!Number.isFinite(ms)) return '';
   return formatWall(ms).slice(0, 16).replace(' ', 'T');
 }
 

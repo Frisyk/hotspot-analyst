@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FastForward, Pause, Play, SkipBack, SkipForward } from 'lucide-react';
 import { dateOfHour, formatDay, formatWall, parseWall } from '../utils/timeUtils';
-import { getColorForDate } from '../utils/colorPalette';
+import { getColorForHour } from '../utils/colorPalette';
 
 const MAX_BINS = 360;
 
@@ -26,6 +26,7 @@ export default function TimeSlider({
   const curMs = currentTime ? parseWall(currentTime) : maxMs;
   const offset = Math.min(totalHours, Math.max(0, Math.round((curMs - minMs) / 3600000)));
   const startHr = Math.floor(minMs / 3600000);
+  const endHr = Math.floor(maxMs / 3600000);
 
   const offRef = useRef(offset);
   offRef.current = offset;
@@ -59,7 +60,8 @@ export default function TimeSlider({
         const idx = startHr + b * per + k - (hourly?.hr0 ?? 0);
         if (hourly && idx >= 0 && idx < hourly.total.length) sum += hourly.total[idx];
       }
-      out.push({ sum, endHour: (b + 1) * per - 1, date: dateOfHour(startHr + b * per) });
+      const midHour = startHr + b * per + Math.floor(per / 2);
+      out.push({ sum, endHour: (b + 1) * per - 1, hour: midHour, date: dateOfHour(startHr + b * per) });
       if (sum > max) max = sum;
     }
     return { out, max, bins, per };
@@ -141,7 +143,7 @@ export default function TimeSlider({
                   y={99 - h}
                   width={0.76}
                   height={h}
-                  fill={getColorForDate(b.date, dateColorMap)}
+                  fill={getColorForHour(b.hour, startHr, endHr)}
                   opacity={past ? 0.95 : 0.2}
                 />
               );

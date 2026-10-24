@@ -58,15 +58,20 @@ export default function FilterPanel({
   const dirty = localStart !== startTime || localEnd !== endTime || localSource !== source;
 
   const presetRange = (p) => {
-    const maxMs = parseWall(maxTimeBound || endTime);
+    const rawMax = maxTimeBound || endTime;
+    const maxMs = parseWall(rawMax);
+    if (!Number.isFinite(maxMs)) return [localStart || '', localEnd || ''];
     if (p.span == null) return [minTimeBound || localStart, maxTimeBound || localEnd];
-    return [formatInput(maxMs - p.span), formatInput(maxMs)];
+    const s = formatInput(maxMs - p.span);
+    const e = formatInput(maxMs);
+    if (!s || !e) return [localStart || '', localEnd || ''];
+    return [s, e];
   };
 
   const activePreset = useMemo(
     () => PRESETS.find((p) => {
       const [s, e] = presetRange(p);
-      return s === localStart && e === localEnd;
+      return s && e && s === localStart && e === localEnd;
     })?.id,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [localStart, localEnd, minTimeBound, maxTimeBound]
@@ -74,6 +79,7 @@ export default function FilterPanel({
 
   const applyPreset = (p) => {
     const [s, e] = presetRange(p);
+    if (!s || !e) return;
     setLocalStart(s);
     setLocalEnd(e);
     onApplyFilter({ start: s, end: e, source: localSource });
@@ -81,7 +87,8 @@ export default function FilterPanel({
 
   const submit = (e) => {
     e.preventDefault();
-    if (invalid) return;
+    if (invalid || !localStart || !localEnd) return;
+    if (localStart.includes('NaN') || localEnd.includes('NaN')) return;
     onApplyFilter({ start: localStart, end: localEnd, source: localSource });
   };
 

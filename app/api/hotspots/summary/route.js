@@ -11,9 +11,17 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   const sp = new URL(request.url).searchParams;
   const sourceParam = sp.get('source') || 'all';
+  const start = sp.get('start') || null;
+  const end = sp.get('end') || null;
+  if (start && (start.includes('NaN') || isNaN(Date.parse(start)))) {
+    return NextResponse.json({ error: 'Invalid start parameter' }, { status: 400 });
+  }
+  if (end && (end.includes('NaN') || isNaN(Date.parse(end)))) {
+    return NextResponse.json({ error: 'Invalid end parameter' }, { status: 400 });
+  }
   const opts = {
-    start: sp.get('start') || null,
-    end: sp.get('end') || null,
+    start,
+    end,
     source: ['all', 'firms', 'sipongi'].includes(sourceParam) ? sourceParam : 'all',
   };
 

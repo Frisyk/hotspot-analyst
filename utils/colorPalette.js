@@ -1,21 +1,140 @@
-// Pre-curated high-contrast neon palette tailored for dark maps
-const BASE_COLORS = [
-  '#FF3838', // Vibrant Red / Neon Crimson
-  '#FF9F1A', // Bright Amber / Orange
-  '#FFE600', // Electric Yellow
-  '#17C964', // Emerald / Mint Green
-  '#00F0FF', // Cyber Cyan
-  '#7828C8', // Deep Violet
-  '#F31260', // Hot Pink
-  '#3880FF', // Electric Blue
-  '#2DD4BF', // Bright Teal
-  '#FB923C', // Coral Orange
-  '#C084FC', // Lavender Purple
-  '#F43F5E', // Rose Red
+/**
+ * Skala Warna Kronologis Titik Api (Recency Color Scheme):
+ * - Paling terbaru  -> MERAH  (#FF2222)
+ * - Semakin lama    -> ORANGE (#FF7A00)
+ * - Semakin lama    -> KUNING (#FFD200)
+ * - Semakin lama    -> HIJAU  (#10B981)
+ * - Paling lama     -> BIRU   (#0091FF)
+ *
+ * Mendukung resolusi gradien kontinu sampai tingkat PER JAM (hourly gradient).
+ */
+
+export const RECENCY_STOPS = [
+  { t: 0.00, hex: '#0091FF', r: 0,   g: 145, b: 255, label: 'Biru (Paling lama)' },
+  { t: 0.25, hex: '#10B981', r: 16,  g: 185, b: 129, label: 'Hijau' },
+  { t: 0.50, hex: '#FFD200', r: 255, g: 210, b: 0,   label: 'Kuning' },
+  { t: 0.75, hex: '#FF7A00', r: 255, g: 122, b: 0,   label: 'Orange' },
+  { t: 1.00, hex: '#FF2222', r: 255, g: 34,  b: 34,  label: 'Merah (Paling terbaru)' },
 ];
 
-// Cache for consistent date-to-color assignment
-const colorCache = new Map();
+export const RECENCY_COLORS = [
+  '#0091FF', // 0: Biru (Paling lama)
+  '#10B981', // 1: Hijau
+  '#FFD200', // 2: Kuning
+  '#FF7A00', // 3: Orange
+  '#FF2222', // 4: Merah (Paling terbaru)
+];
+
+const STOPS = RECENCY_STOPS;
+
+/**
+ * Interpolasi RGB untuk rasio t [0.0 = paling lama / Biru s.d. 1.0 = paling terbaru / Merah].
+ * @param {number} t
+ * @returns {[number, number, number]} [r, g, b] (0-255)
+ */
+export function getRgbForRatio(t) {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 1));
+  for (let i = 0; i < STOPS.length - 1; i++) {
+    const s0 = STOPS[i];
+    const s1 = STOPS[i + 1];
+    if (clamped <= s1.t) {
+      const f = (clamped - s0.t) / (s1.t - s0.t);
+      const r = Math.round(s0.r + (s1.r - s0.r) * f);
+      const g = Math.round(s0.g + (s1.g - s0.g) * f);
+      const b = Math.round(s0.b + (s1.b - s0.b) * f);
+      return [r, g, b];
+    }
+  }
+  return [255, 34, 34];
+}
+
+/**
+ * Interpolasi warna Hex '#RRGGBB' untuk rasio t [0, 1].
+ * @param {number} t
+ * @returns {string} '#RRGGBB'
+ */
+export function getColorForRatio(t) {
+  const [r, g, b] = getRgbForRatio(t);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+}
+
+/**
+ * Mengambil warna RGB [r, g, b] untuk jam tertentu dalam rentang [minHour, maxHour].
+ * - Jam maxHour (terbaru)  -> Merah [255, 34, 34]
+ * - Jam minHour (terlama)  -> Biru [0, 145, 255]
+ *
+ * @param {number} hour
+ * @param {number} minHour
+ * @param {number} maxHour
+ * @returns {[number, number, number]}
+ */
+export function getRgbForHour(hour, minHour, maxHour) {
+  const span = maxHour - minHour;
+  const ratio = span > 0 ? (hour - minHour) / span : 1;
+  return getRgbForRatio(ratio);
+}
+
+/**
+ * Mengambil warna Hex '#RRGGBB' untuk jam tertentu dalam rentang [minHour, maxHour].
+ * @param {number} hour
+ * @param {number} minHour
+ * @param {number} maxHour
+ * @returns {string}
+ */
+export function getColorForHour(hour, minHour, maxHour) {
+  const span = maxHour - minHour;
+  const ratio = span > 0 ? (hour - minHour) / span : 1;
+  return getColorForRatio(ratio);
+}
+
+/**
+ * Memberikan warna unik kronologis pada setiap tanggal (kompatibilitas date-level).
+ * Tanggal paling terbaru mendapatkan warna paling MERAH.
+ * Semakin lama tanggalnya, berubah bertahap menjadi ORANGE, KUNING, HIJAU, BIRU (paling lama).
+ *
+ * @param {string[]} uniqueDates - daftar 'YYYY-MM-DD'
+ * @returns {Record<string, string>} map tanggal ke hex color
+ */
+export function generateDateColorMap(uniqueDates = []) {
+  const map = {};
+  if (!uniqueDates || uniqueDates.length === 0) return map;
+
+  // Urutkan kronologis menaik: index 0 = tanggal paling lama, index n-1 = tanggal paling baru
+  const sorted = [...uniqueDates].sort();
+  const n = sorted.length;
+
+  if (n === 1) {
+    map[sorted[0]] = '#FF2222'; // 1 tanggal tunggal = Merah (paling terbaru)
+    return map;
+  }
+
+  // Untuk rentang 2 s.d. 5 hari: gunakan warna diskret tegas
+  if (n <= 5) {
+    const subset = RECENCY_COLORS.slice(5 - n);
+    sorted.forEach((dateStr, idx) => {
+      map[dateStr] = subset[idx];
+    });
+    return map;
+  }
+
+  // Jika n > 5 hari: interpolasi kontinu sepanjang spektrum Biru -> Hijau -> Kuning -> Orange -> Merah
+  sorted.forEach((dateStr, idx) => {
+    const t = idx / (n - 1); // 0.0 (paling lama) s.d. 1.0 (paling terbaru)
+    map[dateStr] = getColorForRatio(t);
+  });
+
+  return map;
+}
+
+/**
+ * Mengambil warna untuk tanggal tertentu dari map
+ */
+export function getColorForDate(dateStr, dateColorMap = {}) {
+  if (dateColorMap && dateColorMap[dateStr]) {
+    return dateColorMap[dateStr];
+  }
+  return '#FF2222'; // Default fallback: flame red
+}
 
 /**
  * Convert Hex to RGBA string
@@ -23,7 +142,7 @@ const colorCache = new Map();
 export function hexToRgba(hex, alpha = 1) {
   let c = hex.replace('#', '');
   if (c.length === 3) {
-    c = c.split('').map(x => x + x).join('');
+    c = c.split('').map((x) => x + x).join('');
   }
   const num = parseInt(c, 16);
   const r = (num >> 16) & 255;
@@ -33,54 +152,11 @@ export function hexToRgba(hex, alpha = 1) {
 }
 
 /**
- * Assign a unique color to each date
- * @param {string[]} uniqueDates - sorted array of 'YYYY-MM-DD'
- * @returns {Record<string, string>} map of date string to hex color
- */
-export function generateDateColorMap(uniqueDates = []) {
-  const map = {};
-  const sorted = [...uniqueDates].sort();
-
-  sorted.forEach((dateStr, idx) => {
-    if (colorCache.has(dateStr)) {
-      map[dateStr] = colorCache.get(dateStr);
-      return;
-    }
-
-    let color;
-    if (idx < BASE_COLORS.length) {
-      color = BASE_COLORS[idx];
-    } else {
-      // Procedural golden-ratio HSL distribution for more than 12 dates
-      const hue = Math.round((idx * 137.5) % 360);
-      color = `hsl(${hue}, 90%, 62%)`;
-    }
-    colorCache.set(dateStr, color);
-    map[dateStr] = color;
-  });
-
-  return map;
-}
-
-/**
- * Get color for a specific date string
- */
-export function getColorForDate(dateStr, dateColorMap = {}) {
-  if (dateColorMap[dateStr]) {
-    return dateColorMap[dateStr];
-  }
-  if (colorCache.has(dateStr)) {
-    return colorCache.get(dateStr);
-  }
-  return '#FF4500'; // Default fallback flame orange
-}
-
-/**
  * '#rrggbb' | '#rgb' | 'hsl(h, s%, l%)' -> [r, g, b] (0-255).
  * Dipakai untuk mengisi buffer warna GPU (deck.gl).
  */
 export function colorToRgb(color) {
-  if (!color) return [255, 69, 0];
+  if (!color) return [255, 34, 34];
   if (color.startsWith('#')) {
     let c = color.slice(1);
     if (c.length === 3) c = c.split('').map((x) => x + x).join('');
@@ -104,5 +180,5 @@ export function colorToRgb(color) {
     };
     return [Math.round(f(h + 1 / 3) * 255), Math.round(f(h) * 255), Math.round(f(h - 1 / 3) * 255)];
   }
-  return [255, 69, 0];
+  return [255, 34, 34];
 }

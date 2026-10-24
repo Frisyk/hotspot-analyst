@@ -10,7 +10,7 @@ import { Minus, Plus, Crosshair, Mountain, Compass, Flame } from 'lucide-react';
 
 import GlowLayer, { ADDITIVE_PARAMS } from './map/GlowLayer';
 import { decodeHotspots } from '../lib/hotspotCodec';
-import { colorToRgb, getColorForDate } from '../utils/colorPalette';
+import { colorToRgb, getColorForDate, getColorForHour, getRgbForRatio } from '../utils/colorPalette';
 import { expandTileUrls, getBasemapConfig } from '../utils/basemaps';
 import { formatShort, parseWall } from '../utils/timeUtils';
 
@@ -49,30 +49,30 @@ function buildGeometry(d) {
   return { pos, fv, t0, d0, zApplied: false };
 }
 
-function buildColors(ds, dateColorMap) {
-  const { n, cnt, bright, header } = ds.decoded;
-  const { fv, d0 } = ds.geom;
+function buildColors(ds, minHour, maxHour) {
+  const { n, cnt, bright, header, tRel } = ds.decoded;
+  const t0 = header.t0Min;
   const isGrid = header.tier === 'grid';
   const glow = new Uint8Array(n * 4);
   const dots = new Uint8Array(n * 4);
-  const dayRgb = new Map();
+  const span = Math.max(1, maxHour - minHour);
+  const hourRgb = new Map();
 
   for (let i = 0; i < n; i++) {
-    const day = fv[i * 2 + 1];
-    let rgb = dayRgb.get(day);
+    const ptHour = Math.floor((t0 + tRel[i]) / 60);
+    let rgb = hourRgb.get(ptHour);
     if (!rgb) {
-      const dateStr = new Date((d0 + day) * 86400000).toISOString().slice(0, 10);
-      rgb = colorToRgb(getColorForDate(dateStr, dateColorMap));
-      dayRgb.set(day, rgb);
+      const ratio = clamp((ptHour - minHour) / span, 0, 1);
+      rgb = getRgbForRatio(ratio);
+      hourRgb.set(ptHour, rgb);
     }
     const o = i * 4;
     dots[o] = rgb[0]; dots[o + 1] = rgb[1]; dots[o + 2] = rgb[2]; dots[o + 3] = 255;
 
-    // warna bara tetap (merah-oranye); yang menentukan putih/kuning adalah akumulasi additive
     let a;
     if (isGrid) a = Math.min(255, 56 + 44 * Math.log2(cnt[i] || 1));
     else a = 48 + clamp((bright[i] - 300) / 150, 0, 1) * 34;
-    glow[o] = 255; glow[o + 1] = 84; glow[o + 2] = 18; glow[o + 3] = a;
+    glow[o] = rgb[0]; glow[o + 1] = rgb[1]; glow[o + 2] = rgb[2]; glow[o + 3] = a;
   }
   return { glow, dots };
 }
@@ -389,8 +389,23 @@ export default function MapView({
     };
   }, [ready, dataset, terrain.enabled, terrain.exaggeration, elevRun]);
 
-  // ---------- warna per titik ----------
-  const colors = useMemo(() => (dataset ? buildColors(dataset, dateColorMap) : null), [dataset, dateColorMap]);
+  // ---------- batas waktu jam untuk gradien kronologis ----------
+  const timeBounds = useMemo(() => {
+    if (selectedDate) {
+      const minH = Math.floor(parseWall(`${selectedDate} 00:00`) / 3600000);
+      const maxH = Math.floor(parseWall(`${selectedDate} 23:59`) / 3600000);
+      return { minHour: minH, maxHour: maxH };
+    }
+    const minH = filter?.start ? Math.floor(parseWall(filter.start) / 3600000) : 0;
+    const maxH = filter?.end ? Math.floor(parseWall(filter.end) / 3600000) : minH + 72;
+    return { minHour: minH, maxHour: maxH };
+  }, [filter?.start, filter?.end, selectedDate]);
+
+  // ---------- warna per titik (sampai tingkat per jam) ----------
+  const colors = useMemo(() => {
+    if (!dataset) return null;
+    return buildColors(dataset, timeBounds.minHour, timeBounds.maxHour);
+  }, [dataset, timeBounds.minHour, timeBounds.maxHour]);
 
   // ---------- data deck.gl (identitas stabil -> tidak upload ulang saat timeline bergerak) ----------
   const glowData = useMemo(() => {
@@ -562,7 +577,13 @@ export default function MapView({
 
       {/* Tooltip */}
       {hover && dataset && (
-        <HoverCard hover={hover} ds={dataset} dateColorMap={dateColorMap} width={containerRef.current?.clientWidth || 0} />
+        <HoverCard
+          hover={hover}
+          ds={dataset}
+          minHour={timeBounds.minHour}
+          maxHour={timeBounds.maxHour}
+          width={containerRef.current?.clientWidth || 0}
+        />
       )}
 
       {!hideUI && (
@@ -619,7 +640,7 @@ export default function MapView({
   );
 }
 
-function HoverCard({ hover, ds, dateColorMap, width }) {
+function HoverCard({ hover, ds, minHour, maxHour, width }) {
   const d = ds.decoded;
   const hdr = d.header;
   const t0 = hdr.t0Min;
@@ -638,8 +659,8 @@ function HoverCard({ hover, ds, dateColorMap, width }) {
   const first = idxs[0];
   const lon = d.lonlat[first * 2];
   const lat = d.lonlat[first * 2 + 1];
-  const dateStr = new Date(rows[0].min * 60000).toISOString().slice(0, 10);
-  const accent = getColorForDate(dateStr, dateColorMap);
+  const firstHour = Math.floor(rows[0].min / 60);
+  const accent = getColorForHour(firstHour, minHour, maxHour);
   const isGrid = hdr.tier === 'grid';
 
   const left = width && hover.x + 18 > width - 270 ? hover.x - 262 : hover.x + 16;
@@ -653,14 +674,18 @@ function HoverCard({ hover, ds, dateColorMap, width }) {
       </div>
       <div className="hc-coord">{lat.toFixed(4)}°, {lon.toFixed(4)}°</div>
       <ul className="hc-list">
-        {rows.slice(0, 5).map((r) => (
-          <li key={r.i}>
-            <span className="hc-dot" style={{ background: KIND_COLOR[r.kind] }} />
-            <span className="hc-time">{formatShort(r.min * 60000)}</span>
-            <span className="hc-sensor">{isGrid ? `${r.cnt}× ${KIND_LABEL[r.kind]}` : r.name}</span>
-            {r.bright > 0 && <span className="hc-bright">{Math.round(r.bright)}K</span>}
-          </li>
-        ))}
+        {rows.slice(0, 5).map((r) => {
+          const rowHour = Math.floor(r.min / 60);
+          const dotColor = getColorForHour(rowHour, minHour, maxHour);
+          return (
+            <li key={r.i}>
+              <span className="hc-dot" style={{ background: dotColor }} title={`${KIND_LABEL[r.kind]} (${r.name})`} />
+              <span className="hc-time">{formatShort(r.min * 60000)}</span>
+              <span className="hc-sensor">{isGrid ? `${r.cnt}× ${KIND_LABEL[r.kind]}` : r.name}</span>
+              {r.bright > 0 && <span className="hc-bright">{Math.round(r.bright)}K</span>}
+            </li>
+          );
+        })}
       </ul>
       {rows.length > 5 && <div className="hc-more">+ {rows.length - 5} deteksi lain di titik ini</div>}
       <div className="hc-foot">Klik untuk {isGrid ? 'masuk ke area ini' : 'fokus'}</div>

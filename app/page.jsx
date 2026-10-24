@@ -75,6 +75,7 @@ export default function HomePage() {
 
   // ---------- ringkasan untuk filter ----------
   const fetchSummary = useCallback(async (f) => {
+    if (!f || !f.start || !f.end || f.start.includes('NaN') || f.end.includes('NaN')) return;
     setSummaryLoading(true);
     try {
       const p = new URLSearchParams();
@@ -231,7 +232,8 @@ export default function HomePage() {
           )}
 
           <Legend
-            dateColorMap={dateColorMap}
+            minTime={filter?.start}
+            maxTime={filter?.end}
             dateStats={summary.dateStats}
             selectedDate={selectedLegendDate}
             onSelectDate={setSelectedLegendDate}
