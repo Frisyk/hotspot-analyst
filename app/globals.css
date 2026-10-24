@@ -385,6 +385,292 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 ::-webkit-scrollbar-thumb { background: var(--line-hi); }
 ::-webkit-scrollbar-thumb:hover { background: var(--bone-faint); }
 
+/* ---------- MapLibre Popup Container ---------- */
+.hotspot-map-popup {
+  z-index: 100 !important;
+}
+.hotspot-map-popup .maplibregl-popup-content {
+  background: var(--ink-1) !important;
+  border: 1px solid var(--line-hi) !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75) !important;
+  color: var(--bone) !important;
+}
+.hotspot-map-popup .maplibregl-popup-tip {
+  border-top-color: var(--line-hi) !important;
+  border-bottom-color: var(--line-hi) !important;
+  border-left-color: var(--line-hi) !important;
+  border-right-color: var(--line-hi) !important;
+}
+
+/* ---------- Hotspot Detail Popup Card ---------- */
+.hp-popup {
+  width: 320px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-ui);
+}
+.hp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink-0);
+}
+.hp-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.hp-dot-pulse {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex: none;
+}
+.hp-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hp-kind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.hp-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 1px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.hp-badge.raw {
+  background: rgba(255, 177, 59, 0.15);
+  color: var(--firms);
+  border: 1px solid rgba(255, 177, 59, 0.35);
+}
+.hp-badge.grid {
+  background: rgba(63, 209, 192, 0.15);
+  color: var(--sipongi);
+  border: 1px solid rgba(63, 209, 192, 0.35);
+}
+.hp-badge.newest {
+  background: rgba(255, 34, 34, 0.2);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 34, 34, 0.4);
+}
+.hp-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bone);
+  line-height: 1.25;
+}
+.hp-close {
+  background: transparent;
+  border: 0;
+  color: var(--bone-dim);
+  padding: 2px;
+  display: grid;
+  place-items: center;
+}
+.hp-close:hover {
+  color: var(--bone);
+}
+
+.hp-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--ink-2);
+  border-bottom: 1px solid var(--line);
+}
+.hp-tabs-label {
+  font-size: 9px;
+  color: var(--bone-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.hp-tabs-scroll {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.hp-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ink-0);
+  border: 1px solid var(--line);
+  padding: 2px 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--bone-dim);
+  white-space: nowrap;
+}
+.hp-tab-btn i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.hp-tab-btn.on {
+  color: var(--bone);
+  background: var(--ink-3);
+  font-weight: 600;
+}
+
+.hp-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--ink-1);
+}
+.hp-stat-card {
+  background: var(--ink-0);
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hp-stat-k {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: var(--bone-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.hp-stat-v {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bone);
+}
+.hp-stat-v.conf-high { color: #ff5555; }
+.hp-stat-v.conf-nominal { color: var(--ember-hot); }
+.hp-stat-v.conf-low { color: #52a9ff; }
+.hp-stat-sub {
+  font-size: 9px;
+  color: var(--bone-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hp-detail-table {
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--ink-1);
+}
+.hp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  padding: 2px 0;
+}
+.hp-row-k {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--bone-faint);
+  font-size: 10px;
+}
+.hp-row-v {
+  color: var(--bone);
+  text-align: right;
+  font-weight: 500;
+}
+.hp-row-v.coord {
+  font-size: 10px;
+  color: var(--ember-hot);
+}
+.hp-row-v.uid {
+  font-size: 9px;
+  color: var(--bone-dim);
+}
+.hp-notice-grid {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: rgba(63, 209, 192, 0.08);
+  border: 1px solid rgba(63, 209, 192, 0.25);
+  font-size: 10px;
+  color: var(--sipongi);
+  line-height: 1.35;
+}
+
+.hp-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--ink-0);
+  border-top: 1px solid var(--line);
+}
+.hp-actions button, .hp-actions a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 1px;
+  transition: all 0.12s;
+}
+.hp-btn-copy {
+  flex: 1;
+  background: var(--ink-2);
+  border: 1px solid var(--line-hi);
+  color: var(--bone);
+}
+.hp-btn-copy:hover {
+  background: var(--ink-3);
+  border-color: var(--bone-faint);
+}
+.hp-btn-copy.copied {
+  border-color: #10B981;
+  color: #10B981;
+}
+.hp-btn-zoom, .hp-btn-focus {
+  flex: 1;
+  background: var(--ember);
+  border: 1px solid var(--ember);
+  color: var(--ink-0);
+}
+.hp-btn-zoom:hover, .hp-btn-focus:hover {
+  background: var(--ember-hot);
+}
+.hp-btn-ext {
+  background: var(--ink-2);
+  border: 1px solid var(--line);
+  color: var(--bone-dim);
+}
+.hp-btn-ext:hover {
+  color: var(--bone);
+  border-color: var(--bone-faint);
+}
+
 @media (max-width: 900px) {
   :root { --dock-w: 44px; }
   .readout.hide-sm { display: none; }

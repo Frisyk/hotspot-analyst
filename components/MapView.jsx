@@ -9,6 +9,8 @@ import { DataFilterExtension } from '@deck.gl/extensions';
 import { Minus, Plus, Crosshair, Mountain, Compass, Flame } from 'lucide-react';
 
 import GlowLayer, { ADDITIVE_PARAMS } from './map/GlowLayer';
+import HotspotDetailPopup from './HotspotDetailPopup';
+import { createPortal } from 'react-dom';
 import { decodeHotspots } from '../lib/hotspotCodec';
 import { colorToRgb, getColorForDate, getColorForHour, getRgbForRatio } from '../utils/colorPalette';
 import { expandTileUrls, getBasemapConfig } from '../utils/basemaps';
@@ -141,6 +143,7 @@ export default function MapView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [hover, setHover] = useState(null);
+  const [selectedHotspot, setSelectedHotspot] = useState(null);
   const [elevVersion, setElevVersion] = useState(0);
   const [elevRun, setElevRun] = useState(0);
   const [elevProgress, setElevProgress] = useState(null);
@@ -151,6 +154,14 @@ export default function MapView({
   const datasetRef = useRef(null);
   datasetRef.current = dataset;
   const terrainWasOn = useRef(false);
+  const popupRef = useRef(null);
+  const popupNodeRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined' && !popupNodeRef.current) {
+      popupNodeRef.current = document.createElement('div');
+    }
+  }, []);
 
   const filterKey = `${filter?.start || ''}|${filter?.end || ''}|${filter?.source || 'all'}`;
   const filterKeyRef = useRef(filterKey);
@@ -456,16 +467,106 @@ export default function MapView({
   const handleClick = useCallback((info) => {
     const ds = datasetRef.current;
     const map = mapRef.current;
-    if (!ds || !map || info.index == null || info.index < 0) return;
-    const lon = ds.decoded.lonlat[info.index * 2];
-    const lat = ds.decoded.lonlat[info.index * 2 + 1];
-    const isGrid = ds.decoded.header.tier === 'grid';
-    map.flyTo({
-      center: [lon, lat],
-      zoom: isGrid ? Math.min(map.getZoom() + 2.4, 10.5) : Math.max(map.getZoom(), 12),
-      duration: 900,
+    if (!ds || !map || info.index == null || info.index < 0) {
+      setSelectedHotspot(null);
+      return;
+    }
+
+    const d = ds.decoded;
+    const hdr = d.header;
+    const t0 = hdr.t0Min;
+    const isGrid = hdr.tier === 'grid';
+    const cell = hdr.cell;
+
+    let idxs = [info.index];
+    try {
+      const multi = overlayRef.current?.pickMultipleObjects({
+        x: info.x, y: info.y, radius: 8, depth: 10, layerIds: [info.layer.id],
+      });
+      if (multi && multi.length) idxs = multi.map((m) => m.index);
+    } catch (e) { /* picking ganda opsional */ }
+
+    const first = idxs[0];
+    const lon = d.lonlat[first * 2];
+    const lat = d.lonlat[first * 2 + 1];
+
+    let totalCnt = 0;
+    let maxBright = 0;
+    const rows = idxs.map((i) => {
+      totalCnt += d.cnt[i];
+      if (d.bright[i] > maxBright) maxBright = d.bright[i];
+      const [sensorName, kind] = hdr.sensors[d.sensor[i]] || ['FIRMS', 0];
+      const min = t0 + d.tRel[i];
+      const ptHour = Math.floor(min / 60);
+      const ptColor = getColorForHour(ptHour, timeBounds.minHour, timeBounds.maxHour);
+      const conf = hdr.conf[d.conf[i]] || '-';
+      const prov = hdr.prov[d.prov[i]] || 'Kalimantan';
+      return {
+        i,
+        min,
+        cnt: d.cnt[i],
+        bright: d.bright[i],
+        sensorName,
+        kind,
+        conf,
+        prov,
+        color: ptColor,
+      };
     });
-  }, []);
+    rows.sort((a, b) => b.min - a.min);
+
+    const elev = map.getTerrain() ? map.queryTerrainElevation([lon, lat]) : null;
+    const primaryHour = Math.floor(rows[0].min / 60);
+    const primaryColor = getColorForHour(primaryHour, timeBounds.minHour, timeBounds.maxHour);
+
+    setSelectedHotspot({
+      lon,
+      lat,
+      isGrid,
+      cell,
+      rows,
+      totalCnt,
+      maxBright,
+      elevation: elev,
+      color: primaryColor,
+    });
+
+    map.easeTo({ center: [lon, lat], duration: 450 });
+  }, [timeBounds.minHour, timeBounds.maxHour]);
+
+  // MapLibre Popup lifecycle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    if (!selectedHotspot) {
+      if (popupRef.current) {
+        popupRef.current.remove();
+        popupRef.current = null;
+      }
+      return;
+    }
+
+    if (!popupRef.current) {
+      const p = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: '360px',
+        className: 'hotspot-map-popup',
+        offset: 14,
+      })
+        .setLngLat([selectedHotspot.lon, selectedHotspot.lat])
+        .setDOMContent(popupNodeRef.current)
+        .addTo(map);
+
+      p.on('close', () => {
+        setSelectedHotspot(null);
+      });
+      popupRef.current = p;
+    } else {
+      popupRef.current.setLngLat([selectedHotspot.lon, selectedHotspot.lat]);
+    }
+  }, [selectedHotspot, ready]);
 
   // ---------- layer ----------
   const tier = dataset?.decoded.header.tier;
@@ -575,8 +676,8 @@ export default function MapView({
 
       {loading && <div className="load-bar" />}
 
-      {/* Tooltip */}
-      {hover && dataset && (
+      {/* Tooltip Hover (disembunyikan bila popup detail sedang terbuka) */}
+      {!selectedHotspot && hover && dataset && (
         <HoverCard
           hover={hover}
           ds={dataset}
@@ -584,6 +685,21 @@ export default function MapView({
           maxHour={timeBounds.maxHour}
           width={containerRef.current?.clientWidth || 0}
         />
+      )}
+
+      {/* Pop-up Detail Hotspot Interaktif (Di-anchor langsung ke koordinat peta via MapLibre) */}
+      {selectedHotspot && popupNodeRef.current && createPortal(
+        <HotspotDetailPopup
+          hotspot={selectedHotspot}
+          onClose={() => setSelectedHotspot(null)}
+          onFocus={(lon, lat) => {
+            mapRef.current?.flyTo({ center: [lon, lat], zoom: Math.max(mapRef.current.getZoom(), 11), duration: 600 });
+          }}
+          onZoomIn={(lon, lat) => {
+            mapRef.current?.flyTo({ center: [lon, lat], zoom: 11.5, duration: 800 });
+          }}
+        />,
+        popupNodeRef.current
       )}
 
       {!hideUI && (
