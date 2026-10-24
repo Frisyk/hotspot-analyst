@@ -58,7 +58,7 @@ export default function ViewPanel({
         </button>
 
         <label className="field" style={{ marginTop: 12 }}>
-          <span className="field-label">Skala vertikal <b>{terrain.exaggeration.toFixed(1)}×</b></span>
+          <span className="field-label">Skala vertikal <b>{terrain?.exaggeration != null && Number.isFinite(terrain.exaggeration) ? terrain.exaggeration.toFixed(1) : '1.5'}×</b></span>
           <input
             id="range-exaggeration" className="range" type="range" min={10} max={40}
             value={Math.round(terrain.exaggeration * 10)} disabled={!terrain.enabled}

@@ -163,6 +163,11 @@ export default function MapView({
     }
   }, []);
 
+  // Reset hover state saat dataset berganti agar indeks titik lama tidak out-of-bounds
+  useEffect(() => {
+    setHover(null);
+  }, [dataset]);
+
   const filterKey = `${filter?.start || ''}|${filter?.end || ''}|${filter?.source || 'all'}`;
   const filterKeyRef = useRef(filterKey);
   filterKeyRef.current = filterKey;
@@ -200,6 +205,10 @@ export default function MapView({
     });
 
     let zoomRaf = 0;
+    map.on('movestart', () => {
+      setHover(null);
+    });
+
     map.on('move', () => {
       cancelAnimationFrame(zoomRaf);
       zoomRaf = requestAnimationFrame(() => {
@@ -213,8 +222,9 @@ export default function MapView({
     map.on('mousemove', (e) => {
       cancelAnimationFrame(hudRaf);
       hudRaf = requestAnimationFrame(() => {
-        if (!hudRef.current) return;
+        if (!hudRef.current || !e.lngLat) return;
         const { lng, lat } = e.lngLat;
+        if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
         const elev = map.getTerrain() ? map.queryTerrainElevation(e.lngLat) : null;
         const ex = map.getTerrain() ? map.getTerrain().exaggeration || 1 : 1;
         hudRef.current.textContent =
@@ -496,26 +506,37 @@ export default function MapView({
     const isGrid = hdr.tier === 'grid';
     const cell = hdr.cell;
 
-    const first = idxs[0];
+    const validIdxs = idxs.filter((i) => typeof i === 'number' && i >= 0 && i < d.n);
+    if (!validIdxs.length) {
+      setSelectedHotspot(null);
+      return;
+    }
+
+    const first = validIdxs[0];
     const lon = d.lonlat[first * 2];
     const lat = d.lonlat[first * 2 + 1];
 
+    if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setSelectedHotspot(null);
+      return;
+    }
+
     let totalCnt = 0;
     let maxBright = 0;
-    const rows = idxs.map((i) => {
-      totalCnt += d.cnt[i];
+    const rows = validIdxs.map((i) => {
+      totalCnt += d.cnt[i] || 1;
       if (d.bright[i] > maxBright) maxBright = d.bright[i];
-      const [sensorName, kind] = hdr.sensors[d.sensor[i]] || ['FIRMS', 0];
-      const min = t0 + d.tRel[i];
+      const [sensorName, kind] = (hdr.sensors && hdr.sensors[d.sensor[i]]) || ['FIRMS', 0];
+      const min = t0 + (d.tRel[i] || 0);
       const ptHour = Math.floor(min / 60);
       const ptColor = getColorForHour(ptHour, timeBounds.minHour, timeBounds.maxHour);
-      const conf = hdr.conf[d.conf[i]] || '-';
-      const prov = hdr.prov[d.prov[i]] || 'Kalimantan';
+      const conf = (hdr.conf && hdr.conf[d.conf[i]]) || '-';
+      const prov = (hdr.prov && hdr.prov[d.prov[i]]) || 'Kalimantan';
       return {
         i,
         min,
-        cnt: d.cnt[i],
-        bright: d.bright[i],
+        cnt: d.cnt[i] || 1,
+        bright: d.bright[i] || 0,
         sensorName,
         kind,
         conf,
@@ -526,7 +547,7 @@ export default function MapView({
     rows.sort((a, b) => b.min - a.min);
 
     const elev = map.getTerrain() ? map.queryTerrainElevation([lon, lat]) : null;
-    const primaryHour = Math.floor(rows[0].min / 60);
+    const primaryHour = rows[0]?.min != null && Number.isFinite(rows[0].min) ? Math.floor(rows[0].min / 60) : timeBounds.minHour;
     const primaryColor = getColorForHour(primaryHour, timeBounds.minHour, timeBounds.maxHour);
 
     setSelectedHotspot({
@@ -737,7 +758,7 @@ export default function MapView({
 
           <div className="hud">
             <div className="hud-row">
-              <span className="hud-k">Z</span><span className="hud-v">{zoom.toFixed(1)}</span>
+              <span className="hud-k">Z</span><span className="hud-v">{Number.isFinite(zoom) ? zoom.toFixed(1) : '—'}</span>
               <span className="hud-sep" />
               <span className="hud-k">Mode</span>
               <span className="hud-v">{tier === 'grid' ? `Agregat ${cell}°` : tier === 'raw' ? 'Titik mentah' : '—'}</span>
@@ -768,25 +789,37 @@ export default function MapView({
 }
 
 function HoverCard({ hover, ds, minHour, maxHour, width, onOpenDetail }) {
+  if (!hover || !hover.idxs || !hover.idxs.length || !ds || !ds.decoded) return null;
   const d = ds.decoded;
   const hdr = d.header;
+  if (!d.lonlat || !hdr || !d.n) return null;
+
   const t0 = hdr.t0Min;
-  const idxs = hover.idxs.slice(0, 200);
+  const validIdxs = hover.idxs
+    .filter((i) => typeof i === 'number' && i >= 0 && i < d.n)
+    .slice(0, 200);
+
+  if (!validIdxs.length) return null;
 
   let total = 0;
   let maxBright = 0;
-  const rows = idxs.map((i) => {
-    total += d.cnt[i];
+  const rows = validIdxs.map((i) => {
+    total += d.cnt[i] || 1;
     if (d.bright[i] > maxBright) maxBright = d.bright[i];
-    const [name, kind] = hdr.sensors[d.sensor[i]] || ['FIRMS', 0];
-    return { i, min: t0 + d.tRel[i], cnt: d.cnt[i], bright: d.bright[i], name, kind };
+    const [name, kind] = (hdr.sensors && hdr.sensors[d.sensor[i]]) || ['FIRMS', 0];
+    return { i, min: t0 + (d.tRel[i] || 0), cnt: d.cnt[i] || 1, bright: d.bright[i] || 0, name, kind };
   });
   rows.sort((a, b) => a.min - b.min);
 
-  const first = idxs[0];
+  const first = validIdxs[0];
   const lon = d.lonlat[first * 2];
   const lat = d.lonlat[first * 2 + 1];
-  const firstHour = Math.floor(rows[0].min / 60);
+
+  if (lat == null || lon == null || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+
+  const firstHour = rows[0]?.min != null && Number.isFinite(rows[0].min) ? Math.floor(rows[0].min / 60) : minHour;
   const accent = getColorForHour(firstHour, minHour, maxHour);
   const isGrid = hdr.tier === 'grid';
 
@@ -795,9 +828,9 @@ function HoverCard({ hover, ds, minHour, maxHour, width, onOpenDetail }) {
   const handleClickCard = () => {
     if (!onOpenDetail) return;
     const mappedRows = rows.map((r) => {
-      const [sensorName, kind] = hdr.sensors[d.sensor[r.i]] || ['FIRMS', 0];
-      const conf = hdr.conf[d.conf[r.i]] || '-';
-      const prov = hdr.prov[d.prov[r.i]] || 'Kalimantan';
+      const [sensorName, kind] = (hdr.sensors && hdr.sensors[d.sensor[r.i]]) || ['FIRMS', 0];
+      const conf = (hdr.conf && hdr.conf[d.conf[r.i]]) || '-';
+      const prov = (hdr.prov && hdr.prov[d.prov[r.i]]) || 'Kalimantan';
       const ptHour = Math.floor(r.min / 60);
       return {
         i: r.i,
@@ -857,3 +890,4 @@ function HoverCard({ hover, ds, minHour, maxHour, width, onOpenDetail }) {
     </div>
   );
 }
+

@@ -90,7 +90,15 @@ export default function HotspotDetailPopup({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  if (!hotspot) return null;
+  if (
+    !hotspot ||
+    typeof hotspot.lat !== 'number' ||
+    typeof hotspot.lon !== 'number' ||
+    !Number.isFinite(hotspot.lat) ||
+    !Number.isFinite(hotspot.lon)
+  ) {
+    return null;
+  }
 
   const { lon, lat, isGrid, rows = [], totalCnt, maxBright, elevation, color } = hotspot;
   const current = rows[activeIdx] || rows[0] || {};
@@ -98,7 +106,9 @@ export default function HotspotDetailPopup({
 
   const brightInfo = formatBrightness(current.bright || maxBright);
   const confInfo = formatConfidence(currentExtra?.conf || current.conf);
-  const frp = currentExtra?.frp ? `${currentExtra.frp.toFixed(1)} MW` : null;
+  const frp = typeof currentExtra?.frp === 'number' && Number.isFinite(currentExtra.frp)
+    ? `${currentExtra.frp.toFixed(1)} MW`
+    : null;
   const dayNight = currentExtra?.daynight === 'D' ? 'Siang (Day pass)' : currentExtra?.daynight === 'N' ? 'Malam (Night pass)' : null;
 
   const copyCoords = () => {
