@@ -99,24 +99,31 @@ export default function HomePage() {
     fetchSummary(f);
   }, [fetchSummary]);
 
-  // ---------- awal: batas DB -> default 2 hari terakhir ----------
+  // ---------- awal: batas DB -> default 2 hari terakhir (mengikuti hari ini dan seterusnya) ----------
   useEffect(() => {
     (async () => {
+      // Waktu saat ini dalam WIB (UTC+7)
+      const nowWib = new Date(Date.now() + 7 * 3600000);
+      const todayStr = nowWib.toISOString().slice(0, 10);
+      const todayWibEnd = `${todayStr}T23:59`;
+
       let minB = '2024-01-01T00:00';
-      let maxB = '2026-10-23T23:59';
+      let maxB = todayWibEnd;
       try {
         const res = await fetch('/api/stats');
         const data = await res.json();
         setDbStats(data);
-        if (data?.min_time && data?.max_time) {
-          minB = data.min_time.slice(0, 16);
-          maxB = data.max_time.slice(0, 16);
+        if (data?.min_time) minB = data.min_time.slice(0, 16);
+        if (data?.max_time) {
+          const dbMax = data.max_time.slice(0, 16);
+          maxB = dbMax > todayWibEnd ? dbMax : todayWibEnd;
         }
       } catch (err) {
         console.error('Gagal memuat statistik DB:', err);
       }
       setMinTimeBound(minB);
-      setMaxTimeBound(maxB);
+      // Jangan kunci batas maksimum pada tanggal kaku masa lalu, biarkan hari ini dan seterusnya
+      setMaxTimeBound(null);
       const endMs = parseWall(maxB);
       const startDay = new Date(endMs - 2 * 86400000);
       startDay.setUTCHours(0, 0, 0, 0);

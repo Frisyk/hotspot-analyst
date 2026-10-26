@@ -58,10 +58,11 @@ export default function FilterPanel({
   const dirty = localStart !== startTime || localEnd !== endTime || localSource !== source;
 
   const presetRange = (p) => {
-    const rawMax = maxTimeBound || endTime;
+    const nowWib = formatInput(Date.now() + 7 * 3600000);
+    const rawMax = maxTimeBound || endTime || nowWib;
     const maxMs = parseWall(rawMax);
     if (!Number.isFinite(maxMs)) return [localStart || '', localEnd || ''];
-    if (p.span == null) return [minTimeBound || localStart, maxTimeBound || localEnd];
+    if (p.span == null) return [minTimeBound || localStart, maxTimeBound || localEnd || nowWib];
     const s = formatInput(maxMs - p.span);
     const e = formatInput(maxMs);
     if (!s || !e) return [localStart || '', localEnd || ''];
@@ -123,7 +124,6 @@ export default function FilterPanel({
                 className={`input${invalid ? ' bad' : ''}`}
                 value={localStart}
                 min={minTimeBound}
-                max={maxTimeBound}
                 onChange={(e) => setLocalStart(e.target.value)}
               />
             </label>
@@ -135,7 +135,6 @@ export default function FilterPanel({
                 className={`input${invalid ? ' bad' : ''}`}
                 value={localEnd}
                 min={minTimeBound}
-                max={maxTimeBound}
                 onChange={(e) => setLocalEnd(e.target.value)}
               />
             </label>
