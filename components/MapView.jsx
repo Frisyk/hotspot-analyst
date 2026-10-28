@@ -13,7 +13,7 @@ import { SPREAD_DEFAULT, SPREAD_LAYERS, buildSpreadLayers } from './map/spreadLa
 import HotspotDetailPopup from './HotspotDetailPopup';
 import { createPortal } from 'react-dom';
 import { decodeHotspots } from '../lib/hotspotCodec';
-import { colorToRgb, getColorForDate, getColorForHour, getRgbForRatio } from '../utils/colorPalette';
+import { colorToRgb, getColorForDate, getColorForHour, getRgbForRatio, getRgbForDensity } from '../utils/colorPalette';
 import { expandTileUrls, getBasemapConfig } from '../utils/basemaps';
 import { formatShort, parseWall } from '../utils/timeUtils';
 
@@ -53,7 +53,7 @@ function buildGeometry(d) {
 }
 
 function buildColors(ds, minHour, maxHour) {
-  const { n, cnt, bright, header, tRel } = ds.decoded;
+  const { n, cnt, bright, header, tRel, lonlat } = ds.decoded;
   const t0 = header.t0Min;
   const isGrid = header.tier === 'grid';
   const glow = new Uint8Array(n * 4);
@@ -61,21 +61,62 @@ function buildColors(ds, minHour, maxHour) {
   const span = Math.max(1, maxHour - minHour);
   const hourRgb = new Map();
 
-  for (let i = 0; i < n; i++) {
-    const ptHour = Math.floor((t0 + tRel[i]) / 60);
-    let rgb = hourRgb.get(ptHour);
-    if (!rgb) {
-      const ratio = clamp((ptHour - minHour) / span, 0, 1);
-      rgb = getRgbForRatio(ratio);
-      hourRgb.set(ptHour, rgb);
+  // Jika tier raw, hitung frekuensi spasial lokal (resolusi ~1.6 km)
+  // agar titik mentah yang sering/banyak berkumpul di suatu wilayah merefleksikan densitas tinggi
+  let spatialFreq = null;
+  if (!isGrid && n > 0 && lonlat) {
+    spatialFreq = new Map();
+    const step = 0.015;
+    for (let i = 0; i < n; i++) {
+      const gx = Math.floor(lonlat[i * 2] / step);
+      const gy = Math.floor(lonlat[i * 2 + 1] / step);
+      const k = (gx * 73856093) ^ (gy * 19349663);
+      spatialFreq.set(k, (spatialFreq.get(k) || 0) + 1);
     }
-    const o = i * 4;
-    dots[o] = rgb[0]; dots[o + 1] = rgb[1]; dots[o + 2] = rgb[2]; dots[o + 3] = 255;
+  }
 
-    let a;
-    if (isGrid) a = Math.min(255, 56 + 44 * Math.log2(cnt[i] || 1));
-    else a = 48 + clamp((bright[i] - 300) / 150, 0, 1) * 34;
-    glow[o] = rgb[0]; glow[o + 1] = rgb[1]; glow[o + 2] = rgb[2]; glow[o + 3] = a;
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+
+    // 1. Warna TITIK (Dots): Berdasarkan KRONOLOGIS / TANGGAL (Recency: Biru -> Hijau -> Kuning -> Merah)
+    const ptHour = Math.floor((t0 + tRel[i]) / 60);
+    let dotRgb = hourRgb.get(ptHour);
+    if (!dotRgb) {
+      const timeRatio = clamp((ptHour - minHour) / span, 0, 1);
+      dotRgb = getRgbForRatio(timeRatio);
+      hourRgb.set(ptHour, dotRgb);
+    }
+    dots[o] = dotRgb[0];
+    dots[o + 1] = dotRgb[1];
+    dots[o + 2] = dotRgb[2];
+    dots[o + 3] = 255;
+
+    // 2. Warna DENSITAS BARA (Glow): Berdasarkan INTENSITAS / SERINGNYA TITIK API DI WILAYAH TERSEBUT
+    // (Merah Gelap -> Merah Menyala -> Oranye -> Kuning Emas -> Putih Membara)
+    let densityRatio = 0;
+    let a = 48;
+
+    if (isGrid) {
+      const count = cnt ? (cnt[i] || 1) : 1;
+      // Pemetaan logaritmik: 1 deteksi -> 0.0 (merah tua), 4 deteksi -> 0.33, 16 deteksi -> 0.67, >=64 deteksi -> 1.0 (putih)
+      densityRatio = clamp(Math.log2(count) / 6.0, 0, 1);
+      a = Math.min(255, 52 + Math.round(densityRatio * 185));
+    } else {
+      const gx = Math.floor(lonlat[i * 2] / 0.015);
+      const gy = Math.floor(lonlat[i * 2 + 1] / 0.015);
+      const k = (gx * 73856093) ^ (gy * 19349663);
+      const freq = spatialFreq ? (spatialFreq.get(k) || 1) : 1;
+      const b = bright ? (bright[i] || 310) : 310;
+      const brightBonus = clamp((b - 300) / 100, 0, 0.25);
+      densityRatio = clamp((Math.log2(freq) / 5.0) + brightBonus, 0, 1);
+      a = Math.min(255, 45 + Math.round(densityRatio * 175));
+    }
+
+    const glowRgb = getRgbForDensity(densityRatio);
+    glow[o] = glowRgb[0];
+    glow[o + 1] = glowRgb[1];
+    glow[o + 2] = glowRgb[2];
+    glow[o + 3] = a;
   }
   return { glow, dots };
 }

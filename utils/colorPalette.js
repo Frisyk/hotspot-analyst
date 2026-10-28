@@ -28,6 +28,56 @@ export const RECENCY_COLORS = [
 const STOPS = RECENCY_STOPS;
 
 /**
+ * Skala Warna Densitas / Intensitas Frekuensi Hotspot (Thermal Ember Ramp):
+ * Menggambarkan intensitas frekuensi seringnya titik api pada wilayah tertentu:
+ * - 0.00: 1 deteksi (kejadian terisolasi / jarang)    -> Merah Bara Gelap / Maroon  #7F0000 [127, 0, 0]
+ * - 0.25: 2-5 deteksi (mulai terdeteksi)              -> Merah Menyala              #E52B1E [229, 43, 30]
+ * - 0.50: 6-15 deteksi (menumpuk / moderat)           -> Oranye Terang              #FF6B00 [255, 107, 0]
+ * - 0.75: 16-40 deteksi (sering terbakar)             -> Oranye Keemasan / Kuning   #FFB300 [255, 179, 0]
+ * - 0.90: 41-90 deteksi (sangat padat / persisten)    -> Kuning Terang              #FFF033 [255, 240, 51]
+ * - 1.00: > 90 deteksi (titik api intensif/ekstrem)   -> Putih Pijar / White-Hot    #FFFFFF [255, 255, 255]
+ */
+export const DENSITY_STOPS = [
+  { t: 0.00, hex: '#7F0000', r: 127, g: 0,   b: 0,   label: '1 deteksi (jarang)' },
+  { t: 0.25, hex: '#E52B1E', r: 229, g: 43,  b: 30,  label: 'Sedikit' },
+  { t: 0.50, hex: '#FF6B00', r: 255, g: 107, b: 0,   label: 'Menumpuk' },
+  { t: 0.75, hex: '#FFB300', r: 255, g: 179, b: 0,   label: 'Sering' },
+  { t: 0.90, hex: '#FFF033', r: 255, g: 240, b: 51,  label: 'Sangat padat' },
+  { t: 1.00, hex: '#FFFFFF', r: 255, g: 255, b: 255, label: 'Puncak intensitas' },
+];
+
+/**
+ * Interpolasi RGB untuk rasio intensitas densitas t [0.0 = jarang s.d. 1.0 = sangat sering/padat].
+ * @param {number} t
+ * @returns {[number, number, number]} [r, g, b] (0-255)
+ */
+export function getRgbForDensity(t) {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+  for (let i = 0; i < DENSITY_STOPS.length - 1; i++) {
+    const s0 = DENSITY_STOPS[i];
+    const s1 = DENSITY_STOPS[i + 1];
+    if (clamped <= s1.t) {
+      const f = (clamped - s0.t) / (s1.t - s0.t);
+      const r = Math.round(s0.r + (s1.r - s0.r) * f);
+      const g = Math.round(s0.g + (s1.g - s0.g) * f);
+      const b = Math.round(s0.b + (s1.b - s0.b) * f);
+      return [r, g, b];
+    }
+  }
+  return [255, 255, 255];
+}
+
+/**
+ * Interpolasi Hex untuk rasio intensitas densitas t [0, 1].
+ * @param {number} t
+ * @returns {string} '#RRGGBB'
+ */
+export function getColorForDensity(t) {
+  const [r, g, b] = getRgbForDensity(t);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+}
+
+/**
  * Interpolasi RGB untuk rasio t [0.0 = paling lama / Biru s.d. 1.0 = paling terbaru / Merah].
  * @param {number} t
  * @returns {[number, number, number]} [r, g, b] (0-255)

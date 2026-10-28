@@ -36,8 +36,25 @@ export default function ViewPanel({
           />
         </label>
 
-        <div className="ramp" aria-hidden="true" />
-        <div className="ramp-labels"><span>1 deteksi</span><span>menumpuk</span><span>padat</span></div>
+        <div
+          className="ramp"
+          style={{
+            background: 'linear-gradient(90deg, #7F0000 0%, #E52B1E 25%, #FF6B00 50%, #FFB300 75%, #FFF033 90%, #FFFFFF 100%)',
+            height: '10px',
+            borderRadius: '3px',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+          }}
+          aria-hidden="true"
+        />
+        <div className="ramp-labels" style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: '9.5px' }}>
+          <span style={{ color: '#E53935' }}>Jarang (1×)</span>
+          <span style={{ color: '#FB8C00' }}>Menumpuk</span>
+          <span style={{ color: '#FFD54F' }}>Sering</span>
+          <span style={{ color: '#FFFFFF', fontWeight: 600 }}>Sangat Padat</span>
+        </div>
+        <p className="note" style={{ marginTop: 6, fontSize: '10.5px', color: 'var(--bone-faint)', lineHeight: 1.35 }}>
+          Warna bara mencerminkan <b>intensitas/frekuensi kemunculan hotspot</b> di wilayah tersebut, berbeda dengan titik yang mewakili tanggal kejadian.
+        </p>
       </section>
 
       <section className="sec">

@@ -2,8 +2,9 @@ import { ScatterplotLayer } from '@deck.gl/layers';
 
 /**
  * Layer "bara" (ember): ScatterplotLayer dengan falloff Gaussian di fragment shader.
- * Dengan additive blending, titik yang menumpuk menyala dari merah -> oranye -> kuning -> putih
- * tanpa perlu menghitung heatmap di CPU atau merender ulang saat timeline bergerak.
+ * Warna titik mewakili intensitas/frekuensi kemunculan hotspot di wilayah tersebut
+ * (Merah Tua -> Oranye -> Kuning -> Putih Pijar).
+ * Dengan additive blending, area dengan akumulasi titik api tinggi menyala semakin terang.
  */
 export default class GlowLayer extends ScatterplotLayer {
   static layerName = 'GlowLayer';
@@ -16,7 +17,9 @@ export default class GlowLayer extends ScatterplotLayer {
         ...(shaders.inject || {}),
         'fs:DECKGL_FILTER_COLOR': `
           float glowD = length(geometry.uv);
-          color.a *= exp(-glowD * glowD * 3.4);
+          if (glowD > 1.0) discard;
+          float falloff = exp(-glowD * glowD * 3.4);
+          color.a *= falloff;
         `,
       },
     };

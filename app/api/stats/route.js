@@ -26,7 +26,17 @@ function getPool() {
   return pool;
 }
 
+let statsCache = null;
+let statsCacheTs = 0;
+const STATS_TTL = 300_000; // 5 menit cache in-memory
+
 export async function GET() {
+  if (statsCache && Date.now() - statsCacheTs < STATS_TTL) {
+    return NextResponse.json(statsCache, {
+      headers: { 'Cache-Control': 'public, max-age=300', 'X-Cache': 'HIT' },
+    });
+  }
+
   const client = await getPool().connect();
   try {
     const tableCheckRes = await client.query(`
@@ -91,11 +101,25 @@ export async function GET() {
       if (r.max_time && (!overallMax || r.max_time > overallMax)) overallMax = r.max_time;
     });
 
-    return NextResponse.json({
+    const payload = {
       sources,
       min_time: overallMin,
       max_time: overallMax,
       total,
+      density_levels: [
+        { label: 'Jarang (1 deteksi)', color: '#7F0000', minCount: 1 },
+        { label: 'Sedikit (2-5)', color: '#E52B1E', minCount: 2 },
+        { label: 'Menumpuk (6-15)', color: '#FF6B00', minCount: 6 },
+        { label: 'Sering (16-40)', color: '#FFB300', minCount: 16 },
+        { label: 'Sangat Padat (>40)', color: '#FFFFFF', minCount: 41 },
+      ],
+    };
+
+    statsCache = payload;
+    statsCacheTs = Date.now();
+
+    return NextResponse.json(payload, {
+      headers: { 'Cache-Control': 'public, max-age=300', 'X-Cache': 'MISS' },
     });
   } catch (error) {
     console.error('Error in /api/stats:', error);
