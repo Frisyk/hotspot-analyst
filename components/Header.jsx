@@ -63,7 +63,7 @@ export default function Header({
         {dbTotal != null && <Readout label="Arsip DB" value={fmt(dbTotal)} className="hide-sm" />}
       </div>
 
-      <div className="live"><i /> Live · PostGIS</div>
+      {/* <div className="live"><i /> Live · PostGIS</div> */}
 
       <div className="topbar-right">
         <span className="tb-label">Layer</span>

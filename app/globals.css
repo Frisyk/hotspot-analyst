@@ -683,3 +683,70 @@ button { font-family: inherit; color: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- panel layer penyebaran ---------- */
+/* Legenda (lebar 254px) ada di right:60px -> panel diletakkan di kirinya agar tidak saling menutupi. */
+.spread-panel {
+  position: absolute; z-index: 55; top: calc(var(--bar-h) + 14px); right: calc(60px + 254px + 10px); width: 244px;
+  max-height: calc(100vh - var(--bar-h) - var(--tl-h) - 40px); overflow-y: auto;
+  background: var(--ink-1); border: 1px solid var(--line-hi); border-top: 2px solid var(--ember);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column; font-size: 12px; color: var(--bone-dim);
+  animation: spread-in 0.14s ease-out;
+}
+@keyframes spread-in { from { opacity: 0; transform: translateX(6px); } to { opacity: 1; transform: none; } }
+.spread-head {
+  display: flex; align-items: center; gap: 7px; padding: 9px 10px 8px 12px;
+  border-bottom: 1px solid var(--line); color: var(--ember-hot);
+}
+.spread-title { flex: 1; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; font-size: 10px; color: var(--bone); }
+.spread-close {
+  width: 20px; height: 20px; display: grid; place-items: center; line-height: 1; font-size: 16px;
+  background: transparent; border: 1px solid transparent; color: var(--bone-faint); cursor: pointer;
+}
+.spread-close:hover { color: var(--bone); border-color: var(--line-hi); background: var(--ink-2); }
+.spread-list { display: flex; flex-direction: column; padding: 4px 0; }
+.spread-row {
+  position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;
+  transition: background 0.12s;
+}
+.spread-row:hover { background: var(--ink-2); }
+.spread-row.on { background: var(--ink-3); box-shadow: inset 2px 0 0 var(--ember); }
+.spread-row input { position: absolute; opacity: 0; pointer-events: none; }
+.spread-row input:focus-visible ~ .spread-tick { outline: 2px solid var(--ember-hot); outline-offset: 2px; }
+.spread-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.spread-text b { font-size: 12px; font-weight: 600; color: var(--bone-dim); }
+.spread-row.on .spread-text b { color: var(--bone); }
+.spread-text small { font-size: 10px; color: var(--bone-faint); }
+.spread-tick {
+  flex: none; width: 28px; height: 15px; border-radius: 8px; border: 1px solid var(--line-hi);
+  background: var(--ink-0); position: relative; transition: background 0.15s, border-color 0.15s;
+}
+.spread-tick::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--bone-faint); transition: transform 0.15s, background 0.15s;
+}
+.spread-row.on .spread-tick { background: rgba(255, 91, 31, 0.25); border-color: var(--ember); }
+.spread-row.on .spread-tick::after { transform: translateX(13px); background: var(--ember-hot); }
+.spread-sw {
+  flex: none; width: 22px; height: 22px; display: grid; place-items: center; font-style: normal;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--c); opacity: 0.55;
+}
+.spread-row.on .spread-sw { opacity: 1; }
+.spread-sw.ring { border: 2px solid var(--c); border-radius: 50%; background: color-mix(in srgb, var(--c) 28%, transparent); }
+.spread-sw.box { border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.spread-sw.arrow { font-size: 15px; }
+.spread-stats {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 7px 12px; border-top: 1px solid var(--line);
+  background: var(--ink-0); font-family: var(--font-mono); font-size: 10px; color: var(--bone-faint);
+}
+.spread-stats b { color: var(--bone); font-weight: 600; }
+.spread-note {
+  padding: 7px 12px 9px; border-top: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 10px; color: var(--bone-faint); line-height: 1.4;
+}
+.spread-note.err { color: #ff9a9d; }
+
+@media (max-width: 900px) {
+  .spread-panel { right: 60px; }
+}

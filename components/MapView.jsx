@@ -6,9 +6,10 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapboxOverlay } from '@deck.gl/mapbox';
 import { ScatterplotLayer } from '@deck.gl/layers';
 import { DataFilterExtension } from '@deck.gl/extensions';
-import { Minus, Plus, Crosshair, Mountain, Compass, Flame } from 'lucide-react';
+import { Minus, Plus, Crosshair, Mountain, Compass, Flame, GitBranch } from 'lucide-react';
 
 import GlowLayer, { ADDITIVE_PARAMS } from './map/GlowLayer';
+import { SPREAD_DEFAULT, SPREAD_LAYERS, buildSpreadLayers } from './map/spreadLayers';
 import HotspotDetailPopup from './HotspotDetailPopup';
 import { createPortal } from 'react-dom';
 import { decodeHotspots } from '../lib/hotspotCodec';
@@ -148,6 +149,14 @@ export default function MapView({
   const [elevRun, setElevRun] = useState(0);
   const [elevProgress, setElevProgress] = useState(null);
 
+  // ---------- layer penyebaran (titik awal / panah / grid) ----------
+  const [spreadVis, setSpreadVis] = useState(SPREAD_DEFAULT);
+  const [spreadOpen, setSpreadOpen] = useState(false);
+  const [spreadData, setSpreadData] = useState(null);
+  const [spreadErr, setSpreadErr] = useState(null);
+  const spreadBoxRef = useRef(null);
+  const anySpread = Object.values(spreadVis).some(Boolean);
+
   const loadedRef = useRef(null);
   const abortRef = useRef(null);
   const seqRef = useRef(0);
@@ -212,9 +221,15 @@ export default function MapView({
     map.on('move', () => {
       cancelAnimationFrame(zoomRaf);
       zoomRaf = requestAnimationFrame(() => {
-        setZoom(Math.round(map.getZoom() * 10) / 10);
         if (compassRef.current) compassRef.current.style.transform = `rotate(${-map.getBearing()}deg)`;
+        const curZ = map.getZoom();
+        const roundedZ = Math.round(curZ * 2) / 2;
+        setZoom((prev) => (Math.abs(prev - roundedZ) >= 0.5 ? roundedZ : prev));
       });
+    });
+
+    map.on('moveend', () => {
+      setZoom(Math.round(map.getZoom() * 10) / 10);
     });
 
     // Readout koordinat + elevasi di bawah kursor (tanpa re-render React)
@@ -350,6 +365,65 @@ export default function MapView({
       map.off('moveend', onEnd);
     };
   }, [ready, load]);
+
+  // ---------- data penyebaran: ikut filter, dimuat hanya bila ada sub-layer aktif ----------
+  const activeSpreadKeys = useMemo(
+    () => Object.entries(spreadVis).filter(([, v]) => v).map(([k]) => k).join(','),
+    [spreadVis]
+  );
+
+  const loadSpread = useCallback(async (force) => {
+    const map = mapRef.current;
+    const f = filterRef.current;
+    if (!map || !f || f.start === undefined) return;
+    const activeKeys = Object.entries(spreadVis).filter(([, v]) => v).map(([k]) => k).join(',');
+    if (!activeKeys) {
+      setSpreadData(null);
+      return;
+    }
+    const b = map.getBounds();
+    const w = b.getWest(), s = b.getSouth(), e = b.getEast(), n = b.getNorth();
+    const cur = spreadBoxRef.current;
+    if (!force && cur && cur.key === filterKeyRef.current && cur.layers === activeKeys &&
+        w >= cur.box[0] && s >= cur.box[1] && e <= cur.box[2] && n <= cur.box[3]) return;
+
+    const padX = (e - w) * 0.5, padY = (n - s) * 0.5;
+    const box = [w - padX, s - padY, e + padX, n + padY];
+    const params = new URLSearchParams();
+    if (f.start) params.set('start', f.start);
+    if (f.end) params.set('end', f.end);
+    if (f.source && f.source !== 'all') params.set('source', f.source);
+    params.set('bbox', box.map((v) => v.toFixed(3)).join(','));
+    params.set('layers', activeKeys);
+
+    try {
+      const res = await fetch(`/api/hotspots/spread?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      spreadBoxRef.current = { key: filterKeyRef.current, layers: activeKeys, box };
+      setSpreadData(json);
+      setSpreadErr(null);
+    } catch (err) {
+      console.error('Gagal memuat penyebaran:', err);
+      setSpreadErr('Data penyebaran belum tersedia');
+    }
+  }, [spreadVis]);
+
+  useEffect(() => {
+    if (!ready || !anySpread) return undefined;
+    loadSpread(true);
+    const map = mapRef.current;
+    let t;
+    const onEnd = () => {
+      clearTimeout(t);
+      t = setTimeout(() => loadSpread(false), 350);
+    };
+    map.on('moveend', onEnd);
+    return () => {
+      clearTimeout(t);
+      map.off('moveend', onEnd);
+    };
+  }, [ready, anySpread, filterKey, activeSpreadKeys, loadSpread]);
 
   // ---------- elevasi titik (hanya saat 3D) ----------
   useEffect(() => {
@@ -491,7 +565,7 @@ export default function MapView({
           idxs = multi.map((m) => m.index).filter((i) => i != null && i >= 0);
           if (idxs.length) idx = idxs[0];
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (idx == null || idx < 0) {
@@ -625,17 +699,22 @@ export default function MapView({
   useEffect(() => {
     const overlay = overlayRef.current;
     if (!overlay) return;
+    const zoomBucket = Math.round(zoom * 2) / 2;
+    const curMin = cursor ? parseWall(cursor) / 60000 : NaN;
+    const spreadLayers = anySpread
+      ? buildSpreadLayers({ data: spreadData, vis: spreadVis, zoom: zoomBucket, curMin, cumulative: isCumulative })
+      : [];
     if (!glowData || !dotData) {
-      overlay.setProps({ layers: [] });
+      overlay.setProps({ layers: spreadLayers });
       return;
     }
 
     const isGrid = tier === 'grid';
     // piksel per sel agar sel agregat menyatu menjadi permukaan kepadatan yang mulus
-    const cellPx = isGrid && cell ? (cell * 111320 * Math.pow(2, zoom)) / 156543 : 0;
-    const zoomScale = clamp(Math.pow(2, (zoom - 8) * 0.3), 0.75, 2.4);
+    const cellPx = isGrid && cell ? (cell * 111320 * Math.pow(2, zoomBucket)) / 156543 : 0;
+    const zoomScale = clamp(Math.pow(2, (zoomBucket - 8) * 0.3), 0.75, 2.4);
     const glowPx = isGrid ? Math.max(glowRadius * 0.8, cellPx * 1.1) : glowRadius * zoomScale;
-    const dotPx = isGrid ? 3 : clamp(2.6 + (zoom - 8) * 0.45, 2.6, 6.5);
+    const dotPx = isGrid ? 3 : clamp(2.6 + (zoomBucket - 8) * 0.45, 2.6, 6.5);
 
     const common = {
       extensions: [filterExt],
@@ -676,11 +755,13 @@ export default function MapView({
           onHover: handleHover,
           onClick: handleClick,
         }),
+        ...spreadLayers,
       ],
     });
   }, [
     glowData, dotData, filterRange, showGlow, showDots, glowRadius, glowOpacity,
-    zoom, tier, cell, handleHover, handleClick,
+    Math.round(zoom * 2) / 2, tier, cell, handleHover, handleClick,
+    anySpread, spreadData, spreadVis, cursor, isCumulative,
   ]);
 
   // ---------- aksi kontrol ----------
@@ -754,7 +835,61 @@ export default function MapView({
               <Mountain size={15} />
               <span className="ctrl-tag">3D</span>
             </button>
+            <button
+              id="btn-spread-layers"
+              className={anySpread ? 'on' : ''}
+              onClick={() => setSpreadOpen((v) => !v)}
+              title="Layer titik awal & arah penyebaran"
+              aria-expanded={spreadOpen}
+              aria-label="Layer penyebaran"
+            >
+              <GitBranch size={15} />
+            </button>
           </div>
+
+          {spreadOpen && (
+            <div className="spread-panel" role="group" aria-label="Layer penyebaran">
+              <div className="spread-head">
+                <GitBranch size={13} />
+                <span className="spread-title">Penyebaran api</span>
+                <button
+                  id="btn-spread-close" type="button" className="spread-close"
+                  onClick={() => setSpreadOpen(false)} aria-label="Tutup panel" title="Tutup"
+                >×</button>
+              </div>
+              <div className="spread-list">
+                {SPREAD_LAYERS.map((l) => {
+                  const on = !!spreadVis[l.key];
+                  return (
+                    <label key={l.key} className={`spread-row${on ? ' on' : ''}`} htmlFor={`spread-${l.key}`}>
+                      <input
+                        id={`spread-${l.key}`}
+                        type="checkbox"
+                        checked={on}
+                        onChange={(e) => setSpreadVis((v) => ({ ...v, [l.key]: e.target.checked }))}
+                      />
+                      <i className={`spread-sw ${l.shape}`} style={{ '--c': l.color }}>
+                        {l.shape === 'num' ? '1' : l.shape === 'arrow' ? '→' : ''}
+                      </i>
+                      <span className="spread-text">
+                        <b>{l.label}</b>
+                        <small>{l.desc}</small>
+                      </span>
+                      <span className="spread-tick" aria-hidden="true" />
+                    </label>
+                  );
+                })}
+              </div>
+              {anySpread && spreadErr && <div className="spread-note err">{spreadErr}</div>}
+              {anySpread && !spreadErr && spreadData && (
+                <div className="spread-stats">
+                  <span><b>{spreadData.origins.length.toLocaleString('id-ID')}</b> titik awal</span>
+                  <span><b>{spreadData.arrows.length.toLocaleString('id-ID')}</b> panah{spreadData.truncated ? ' (dibatasi)' : ''}</span>
+                </div>
+              )}
+              <div className="spread-note">Arah = urutan waktu deteksi satelit, bukan jalur api sebenarnya.</div>
+            </div>
+          )}
 
           <div className="hud">
             <div className="hud-row">
