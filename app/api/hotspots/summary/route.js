@@ -19,10 +19,17 @@ export async function GET(request) {
   if (end && (end.includes('NaN') || isNaN(Date.parse(end)))) {
     return NextResponse.json({ error: 'Invalid end parameter' }, { status: 400 });
   }
+  let bbox = null;
+  const bboxParam = sp.get('bbox');
+  if (bboxParam) {
+    const b = bboxParam.split(',').map(Number);
+    if (b.length === 4 && b.every(Number.isFinite)) bbox = b;
+  }
   const opts = {
     start,
     end,
     source: ['all', 'firms', 'sipongi'].includes(sourceParam) ? sourceParam : 'all',
+    bbox,
   };
 
   try {

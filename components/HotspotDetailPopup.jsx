@@ -17,7 +17,7 @@ import {
   Layers,
   MapPin,
 } from 'lucide-react';
-import { formatWall, formatDay, formatShort } from '../utils/timeUtils';
+import { formatWall, formatDay, formatShort, formatInput } from '../utils/timeUtils';
 
 export function formatBrightness(k) {
   if (!k || k <= 0) return null;
@@ -62,17 +62,31 @@ export default function HotspotDetailPopup({
 
     if (!hotspot || hotspot.isGrid) return;
 
-    // Ambil detail tambahan dari PostgreSQL jika titik mentah
+    // Ambil detail tambahan dari PostgreSQL jika titik mentah (dibatasi jendela waktu deteksi agar instan)
     let cancelled = false;
     setExtraLoading(true);
-    fetch(`/api/hotspots/detail?lat=${hotspot.lat}&lon=${hotspot.lon}`)
+    const params = new URLSearchParams({
+      lat: String(hotspot.lat),
+      lon: String(hotspot.lon),
+    });
+    const mins = (hotspot.rows || [])
+      .map((r) => r.min)
+      .filter((m) => typeof m === 'number' && Number.isFinite(m) && m > 0);
+    if (mins.length > 0) {
+      const minMs = (Math.min(...mins) - 180) * 60000;
+      const maxMs = (Math.max(...mins) + 180) * 60000;
+      params.set('start', formatInput(minMs));
+      params.set('end', formatInput(maxMs));
+    }
+
+    fetch(`/api/hotspots/detail?${params.toString()}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled && data && data.results && data.results.length) {
           setExtraData(data.results);
         }
       })
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => {
         if (!cancelled) setExtraLoading(false);
       });

@@ -12,10 +12,10 @@ import GlowLayer, { ADDITIVE_PARAMS } from './map/GlowLayer';
 import { SPREAD_DEFAULT, SPREAD_LAYERS, buildSpreadLayers } from './map/spreadLayers';
 import HotspotDetailPopup from './HotspotDetailPopup';
 import { createPortal } from 'react-dom';
-import { decodeHotspots } from '../lib/hotspotCodec';
+import { decodeHotspots, mergeHotspotDatasets } from '../lib/hotspotCodec';
 import { colorToRgb, getColorForDate, getColorForHour, getRgbForRatio, getRgbForDensity } from '../utils/colorPalette';
 import { expandTileUrls, getBasemapConfig } from '../utils/basemaps';
-import { formatShort, parseWall } from '../utils/timeUtils';
+import { formatInput, formatShort, parseWall } from '../utils/timeUtils';
 
 /** Di bawah zoom ini data diagregasi di server (sel jam x sumber); di atasnya titik mentah per viewport. */
 const GRID_MAX_ZOOM = 8;
@@ -322,7 +322,7 @@ export default function MapView({
     }
   }, [ready, terrain.enabled, terrain.exaggeration]);
 
-  // ---------- pengambilan data bertingkat ----------
+  // ---------- pengambilan data bertingkat (BBOX + Progressive Two-Phase Load) ----------
   const load = useCallback(async (force = false) => {
     const map = mapRef.current;
     const f = filterRef.current;
@@ -331,33 +331,30 @@ export default function MapView({
     const z = map.getZoom();
     const tier = z < GRID_MAX_ZOOM ? 'grid' : 'raw';
     const key = filterKeyRef.current;
+    const cell = tier === 'grid' ? cellForZoom(z) : null;
+
+    // 1. Selalu hitung BBOX dari viewport saat ini (+ padding 35%) agar query DB dibatasi ke wilayah terlihat
+    const b = map.getBounds();
+    const w = b.getWest(), s = b.getSouth(), e = b.getEast(), n = b.getNorth();
+    const padX = (e - w) * 0.35, padY = (n - s) * 0.35;
+    const q = (v, fn) => (fn(v / 0.1) * 0.1).toFixed(2);
+    const box = [q(w - padX, Math.floor), q(s - padY, Math.floor), q(e + padX, Math.ceil), q(n + padY, Math.ceil)];
+
+    const cur = loadedRef.current;
+    if (!force && cur && cur.key === key && cur.tier === tier && (tier === 'raw' || cur.cell === cell) && cur.box) {
+      const [cw, cs, ce, cn] = cur.box.map(Number);
+      if (w >= cw && s >= cs && e <= ce && n <= cn) return;
+    }
+
     const params = new URLSearchParams();
     if (f.start) params.set('start', f.start);
     if (f.end) params.set('end', f.end);
     if (f.source && f.source !== 'all') params.set('source', f.source);
     params.set('tier', tier);
+    params.set('bbox', box.join(','));
+    if (cell) params.set('cell', String(cell));
 
-    let meta;
-    if (tier === 'grid') {
-      const cell = cellForZoom(z);
-      params.set('cell', String(cell));
-      meta = { key, tier, cell };
-      const cur = loadedRef.current;
-      if (!force && cur && cur.key === key && cur.tier === 'grid' && cur.cell === cell) return;
-    } else {
-      const b = map.getBounds();
-      const w = b.getWest(), s = b.getSouth(), e = b.getEast(), n = b.getNorth();
-      const padX = (e - w) * 0.5, padY = (n - s) * 0.5;
-      const q = (v, fn) => (fn(v / 0.05) * 0.05).toFixed(2);
-      const box = [q(w - padX, Math.floor), q(s - padY, Math.floor), q(e + padX, Math.ceil), q(n + padY, Math.ceil)];
-      const cur = loadedRef.current;
-      if (!force && cur && cur.key === key && cur.tier === 'raw' && cur.box) {
-        const [cw, cs, ce, cn] = cur.box.map(Number);
-        if (w >= cw && s >= cs && e <= ce && n <= cn) return;
-      }
-      params.set('bbox', box.join(','));
-      meta = { key, tier, box };
-    }
+    const meta = { key, tier, cell, box };
 
     if (abortRef.current) abortRef.current.abort();
     const ctrl = new AbortController();
@@ -367,24 +364,67 @@ export default function MapView({
     setLoading(true);
     onLoadingChange?.(true);
     setError(null);
+
     try {
-      const res = await fetch(`/api/hotspots?${params.toString()}`, { signal: ctrl.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const decoded = decodeHotspots(await res.arrayBuffer());
-      if (seq !== seqRef.current) return;
-      loadedRef.current = meta;
-      setDataset({ decoded, geom: buildGeometry(decoded) });
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      console.error('Gagal memuat hotspot:', err);
-      setError('Gagal memuat data hotspot');
-    } finally {
-      if (seq === seqRef.current) {
-        setLoading(false);
-        onLoadingChange?.(false);
+      const startMs = parseWall(f.start);
+      const endMs = parseWall(f.end);
+      const daysSpan = (endMs - startMs) / 86400000;
+
+        // 2. Progressive Two-Phase Streaming (khusus tier === 'raw' dan rentang > 7 hari):
+        // Untuk tier 'grid' atau rentang pendek, muat sekaligus dalam 1 request agar tidak kena 2x RTT & 2x rebuild buffer GPU.
+        if (tier === 'raw' && daysSpan > 7 && f.start && f.end) {
+          const splitMs = endMs - 3 * 86400000;
+          const fastParams = new URLSearchParams(params);
+          fastParams.set('start', formatInput(splitMs));
+
+          const res1 = await fetch(`/api/hotspots?${fastParams.toString()}`, { signal: ctrl.signal });
+          if (!res1.ok) throw new Error(`HTTP ${res1.status}`);
+          const decoded1 = decodeHotspots(await res1.arrayBuffer());
+          if (seq !== seqRef.current) return;
+
+          // Tampilkan batch pertama segera! Peta langsung menyala tanpa menunggu
+          loadedRef.current = meta;
+          setDataset({ decoded: decoded1, geom: buildGeometry(decoded1) });
+          setLoading(false);
+          onLoadingChange?.(false);
+
+          // Phase 2: Muat sisa riwayat historis di background
+          const histParams = new URLSearchParams(params);
+          histParams.set('start', f.start);
+          histParams.set('end', formatInput(splitMs));
+
+          try {
+            const res2 = await fetch(`/api/hotspots?${histParams.toString()}`, { signal: ctrl.signal });
+            if (res2.ok) {
+              const decoded2 = decodeHotspots(await res2.arrayBuffer());
+              if (seq === seqRef.current) {
+                const merged = mergeHotspotDatasets(decoded2, decoded1);
+                setDataset({ decoded: merged, geom: buildGeometry(merged) });
+              }
+            }
+          } catch (errHist) {
+            if (errHist.name !== 'AbortError') console.warn('Gagal memuat batch historis lanjutan:', errHist);
+          }
+        } else {
+          // Mode grid atau rentang <= 7 hari: muat sekaligus dalam satu request
+          const res = await fetch(`/api/hotspots?${params.toString()}`, { signal: ctrl.signal });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const decoded = decodeHotspots(await res.arrayBuffer());
+          if (seq !== seqRef.current) return;
+          loadedRef.current = meta;
+          setDataset({ decoded, geom: buildGeometry(decoded) });
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error('Gagal memuat hotspot:', err);
+        setError('Gagal memuat data hotspot');
+      } finally {
+        if (seq === seqRef.current) {
+          setLoading(false);
+          onLoadingChange?.(false);
+        }
       }
-    }
-  }, [onLoadingChange]);
+    }, [onLoadingChange]);
 
   // filter berubah / peta siap -> muat ulang segera
   useEffect(() => {
@@ -426,7 +466,7 @@ export default function MapView({
     const w = b.getWest(), s = b.getSouth(), e = b.getEast(), n = b.getNorth();
     const cur = spreadBoxRef.current;
     if (!force && cur && cur.key === filterKeyRef.current && cur.layers === activeKeys &&
-        w >= cur.box[0] && s >= cur.box[1] && e <= cur.box[2] && n <= cur.box[3]) return;
+      w >= cur.box[0] && s >= cur.box[1] && e <= cur.box[2] && n <= cur.box[3]) return;
 
     const padX = (e - w) * 0.5, padY = (n - s) * 0.5;
     const box = [w - padX, s - padY, e + padX, n + padY];

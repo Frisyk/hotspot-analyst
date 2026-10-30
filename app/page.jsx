@@ -53,10 +53,10 @@ export default function HomePage() {
       const next = !prev;
       if (next) {
         if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-          document.documentElement.requestFullscreen().catch(() => {});
+          document.documentElement.requestFullscreen().catch(() => { });
         }
       } else if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
       }
       return next;
     });
@@ -99,36 +99,38 @@ export default function HomePage() {
     fetchSummary(f);
   }, [fetchSummary]);
 
-  // ---------- awal: batas DB -> default 2 hari terakhir (mengikuti hari ini dan seterusnya) ----------
+  // ---------- awal: langsung muat default 2 hari terakhir tanpa menunggu /api/stats ----------
   useEffect(() => {
-    (async () => {
-      // Waktu saat ini dalam WIB (UTC+7)
-      const nowWib = new Date(Date.now() + 7 * 3600000);
-      const todayStr = nowWib.toISOString().slice(0, 10);
-      const todayWibEnd = `${todayStr}T23:59`;
+    const nowWib = new Date(Date.now() + 7 * 3600000);
+    const todayStr = nowWib.toISOString().slice(0, 10);
+    const todayWibEnd = `${todayStr}T23:59`;
 
-      let minB = '2024-01-01T00:00';
-      let maxB = todayWibEnd;
+    const endMs = parseWall(todayWibEnd);
+    const startDay = new Date(endMs - 2 * 86400000);
+    startDay.setUTCHours(0, 0, 0, 0);
+    const initialStart = formatInput(startDay.getTime());
+
+    setMinTimeBound('2026-01-01T00:00');
+    setMaxTimeBound(null);
+    // Mulai fetch titik vector & summary seketika tanpa diblokir /api/stats
+    applyFilter({ start: initialStart, end: todayWibEnd, source: 'all' });
+
+    let cancelled = false;
+    (async () => {
       try {
         const res = await fetch('/api/stats');
         const data = await res.json();
+        if (cancelled) return;
         setDbStats(data);
-        if (data?.min_time) minB = data.min_time.slice(0, 16);
-        if (data?.max_time) {
-          const dbMax = data.max_time.slice(0, 16);
-          maxB = dbMax > todayWibEnd ? dbMax : todayWibEnd;
-        }
+        if (data?.min_time) setMinTimeBound(data.min_time.slice(0, 16));
       } catch (err) {
         console.error('Gagal memuat statistik DB:', err);
       }
-      setMinTimeBound(minB);
-      // Jangan kunci batas maksimum pada tanggal kaku masa lalu, biarkan hari ini dan seterusnya
-      setMaxTimeBound(null);
-      const endMs = parseWall(maxB);
-      const startDay = new Date(endMs - 2 * 86400000);
-      startDay.setUTCHours(0, 0, 0, 0);
-      applyFilter({ start: formatInput(startDay.getTime()), end: maxB, source: 'all' });
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [applyFilter]);
 
   // ---------- warna per tanggal ----------
