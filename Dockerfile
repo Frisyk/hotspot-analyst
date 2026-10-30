@@ -1,17 +1,13 @@
-FROM node:20-alpine
-
+FROM node:20-alpine AS build
 WORKDIR /app
-
-# Install dependencies first (better cache)
 COPY package.json ./
 RUN npm install
-
-# Copy source code
 COPY . .
+RUN npm run build
 
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production PORT=3000 HOSTNAME="0.0.0.0"
+COPY --from=build /app ./
 EXPOSE 3000
-
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["npm", "run", "dev"]
+CMD ["sh", "-c", "[ -f .next/BUILD_ID ] || npm run build; exec npm run start"]

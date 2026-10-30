@@ -36,24 +36,37 @@ export async function GET(request) {
     if (b.length === 4 && b.every(Number.isFinite)) bbox = b;
   }
 
+  const cell = tier === 'grid'
+    ? Math.min(1, Math.max(0.001, parseFloat(sp.get('cell') || '0.05')))
+    : null;
+
   const opts = { start, end, source, bbox };
 
+  // Kunci cache dinormalisasi (Langkah 1b) + TTL menurut kesegaran data (Langkah 5b)
+  const key = `hs|${tier}|${source}|${start || ''}|${end || ''}|${bbox ? bbox.join(',') : ''}|${cell ?? ''}`;
+  const nowWallMs = Date.now() + 7 * 3600_000;
+  const endMs = end ? Date.parse(end.length === 16 ? `${end}:00Z` : end) : Infinity;
+  const isLive = !Number.isFinite(endMs) || endMs > nowWallMs - 3 * 3600_000;
+  const ttl = isLive ? 60 : 3600;
+
   try {
-    const key = request.url;
-    const buf = await cached(key, async () => {
-      if (tier === 'grid') {
-        const cell = Math.min(1, Math.max(0.001, parseFloat(sp.get('cell') || '0.05')));
-        const { cols } = await queryGrid(opts, cell);
-        return encodeHotspots(cols, { tier: 'grid', cell });
-      }
-      const { cols, truncated } = await queryRaw(opts, RAW_LIMIT);
-      return encodeHotspots(cols, { tier: 'raw', truncated, limit: RAW_LIMIT });
-    });
+    const buf = await cached(
+      key,
+      async () => {
+        if (tier === 'grid') {
+          const { cols } = await queryGrid(opts, cell);
+          return encodeHotspots(cols, { tier: 'grid', cell });
+        }
+        const { cols, truncated } = await queryRaw(opts, RAW_LIMIT);
+        return encodeHotspots(cols, { tier: 'raw', truncated, limit: RAW_LIMIT });
+      },
+      ttl
+    );
 
     return new Response(buf, {
       headers: {
         'Content-Type': 'application/octet-stream',
-        'Cache-Control': 'private, max-age=30',
+        'Cache-Control': isLive ? 'private, max-age=30' : 'private, max-age=3600',
       },
     });
   } catch (error) {

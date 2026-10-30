@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Eye } from 'lucide-react';
 import Header from '../components/Header';
@@ -46,6 +46,7 @@ export default function HomePage() {
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [mapLoading, setMapLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const summaryKeyRef = useRef('');
 
   // ---------- peta penuh / fullscreen ----------
   const handleToggleHideUI = useCallback(() => {
@@ -94,10 +95,19 @@ export default function HomePage() {
 
   const applyFilter = useCallback((f) => {
     setFilter(f);
+    setMapLoading(true);
     setCurrentTimeCursor(f.end ? `${f.end.replace('T', ' ')}:00` : null);
     setSelectedLegendDate(null);
-    fetchSummary(f);
-  }, [fetchSummary]);
+  }, []);
+
+  // Langkah 1c: Hindari dua agregasi berat bersamaan — muat summary sekali setelah peta selesai memuat titik
+  useEffect(() => {
+    if (!filter || mapLoading) return;
+    const fk = `${filter.start || ''}|${filter.end || ''}|${filter.source || 'all'}`;
+    if (summaryKeyRef.current === fk) return;
+    summaryKeyRef.current = fk;
+    fetchSummary(filter);
+  }, [filter, mapLoading, fetchSummary]);
 
   // ---------- awal: langsung muat default 2 hari terakhir tanpa menunggu /api/stats ----------
   useEffect(() => {

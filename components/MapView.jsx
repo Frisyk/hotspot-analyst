@@ -12,7 +12,7 @@ import GlowLayer, { ADDITIVE_PARAMS } from './map/GlowLayer';
 import { SPREAD_DEFAULT, SPREAD_LAYERS, buildSpreadLayers } from './map/spreadLayers';
 import HotspotDetailPopup from './HotspotDetailPopup';
 import { createPortal } from 'react-dom';
-import { decodeHotspots, mergeHotspotDatasets } from '../lib/hotspotCodec';
+import { decodeHotspots, mergeHotspotDatasets, mergeMany } from '../lib/hotspotCodec';
 import { colorToRgb, getColorForDate, getColorForHour, getRgbForRatio, getRgbForDensity } from '../utils/colorPalette';
 import { expandTileUrls, getBasemapConfig } from '../utils/basemaps';
 import { formatInput, formatShort, parseWall } from '../utils/timeUtils';
@@ -52,73 +52,64 @@ function buildGeometry(d) {
   return { pos, fv, t0, d0, zApplied: false };
 }
 
-function buildColors(ds, minHour, maxHour) {
-  const { n, cnt, bright, header, tRel, lonlat } = ds.decoded;
-  const t0 = header.t0Min;
+// Langkah 6: Pisahkan warna bara (hanya bergantung pada dataset) dari warna titik (bergantung pada rentang jam)
+function buildGlowColors(ds) {
+  const { n, cnt, bright, header, lonlat } = ds.decoded;
   const isGrid = header.tier === 'grid';
   const glow = new Uint8Array(n * 4);
-  const dots = new Uint8Array(n * 4);
-  const span = Math.max(1, maxHour - minHour);
-  const hourRgb = new Map();
+  const step = 0.015;
+  const key = (x, y) => (Math.floor(x / step) + 20000) * 40000 + (Math.floor(y / step) + 20000); // tanpa tabrakan hash
 
-  // Jika tier raw, hitung frekuensi spasial lokal (resolusi ~1.6 km)
-  // agar titik mentah yang sering/banyak berkumpul di suatu wilayah merefleksikan densitas tinggi
-  let spatialFreq = null;
+  let freq = null;
   if (!isGrid && n > 0 && lonlat) {
-    spatialFreq = new Map();
-    const step = 0.015;
+    freq = new Map();
     for (let i = 0; i < n; i++) {
-      const gx = Math.floor(lonlat[i * 2] / step);
-      const gy = Math.floor(lonlat[i * 2 + 1] / step);
-      const k = (gx * 73856093) ^ (gy * 19349663);
-      spatialFreq.set(k, (spatialFreq.get(k) || 0) + 1);
+      const k = key(lonlat[i * 2], lonlat[i * 2 + 1]);
+      freq.set(k, (freq.get(k) || 0) + 1);
     }
   }
-
   for (let i = 0; i < n; i++) {
-    const o = i * 4;
-
-    // 1. Warna TITIK (Dots): Berdasarkan KRONOLOGIS / TANGGAL (Recency: Biru -> Hijau -> Kuning -> Merah)
-    const ptHour = Math.floor((t0 + tRel[i]) / 60);
-    let dotRgb = hourRgb.get(ptHour);
-    if (!dotRgb) {
-      const timeRatio = clamp((ptHour - minHour) / span, 0, 1);
-      dotRgb = getRgbForRatio(timeRatio);
-      hourRgb.set(ptHour, dotRgb);
-    }
-    dots[o] = dotRgb[0];
-    dots[o + 1] = dotRgb[1];
-    dots[o + 2] = dotRgb[2];
-    dots[o + 3] = 255;
-
-    // 2. Warna DENSITAS BARA (Glow): Berdasarkan INTENSITAS / SERINGNYA TITIK API DI WILAYAH TERSEBUT
-    // (Merah Gelap -> Merah Menyala -> Oranye -> Kuning Emas -> Putih Membara)
-    let densityRatio = 0;
-    let a = 48;
-
+    let ratio;
+    let a;
     if (isGrid) {
-      const count = cnt ? (cnt[i] || 1) : 1;
-      // Pemetaan logaritmik: 1 deteksi -> 0.0 (merah tua), 4 deteksi -> 0.33, 16 deteksi -> 0.67, >=64 deteksi -> 1.0 (putih)
-      densityRatio = clamp(Math.log2(count) / 6.0, 0, 1);
-      a = Math.min(255, 52 + Math.round(densityRatio * 185));
+      ratio = clamp(Math.log2(cnt ? cnt[i] || 1 : 1) / 6, 0, 1);
+      a = Math.min(255, 52 + Math.round(ratio * 185));
     } else {
-      const gx = Math.floor(lonlat[i * 2] / 0.015);
-      const gy = Math.floor(lonlat[i * 2 + 1] / 0.015);
-      const k = (gx * 73856093) ^ (gy * 19349663);
-      const freq = spatialFreq ? (spatialFreq.get(k) || 1) : 1;
-      const b = bright ? (bright[i] || 310) : 310;
-      const brightBonus = clamp((b - 300) / 100, 0, 0.25);
-      densityRatio = clamp((Math.log2(freq) / 5.0) + brightBonus, 0, 1);
-      a = Math.min(255, 45 + Math.round(densityRatio * 175));
+      const f = freq ? freq.get(key(lonlat[i * 2], lonlat[i * 2 + 1])) || 1 : 1;
+      const bonus = clamp(((bright ? bright[i] || 310 : 310) - 300) / 100, 0, 0.25);
+      ratio = clamp(Math.log2(f) / 5 + bonus, 0, 1);
+      a = Math.min(255, 45 + Math.round(ratio * 175));
     }
-
-    const glowRgb = getRgbForDensity(densityRatio);
-    glow[o] = glowRgb[0];
-    glow[o + 1] = glowRgb[1];
-    glow[o + 2] = glowRgb[2];
+    const rgb = getRgbForDensity(ratio);
+    const o = i * 4;
+    glow[o] = rgb[0];
+    glow[o + 1] = rgb[1];
+    glow[o + 2] = rgb[2];
     glow[o + 3] = a;
   }
-  return { glow, dots };
+  return glow;
+}
+
+function buildDotColors(ds, minHour, maxHour) {
+  const { n, header, tRel } = ds.decoded;
+  const t0 = header.t0Min;
+  const span = Math.max(1, maxHour - minHour);
+  const dots = new Uint8Array(n * 4);
+  const cache = new Map();
+  for (let i = 0; i < n; i++) {
+    const h = Math.floor((t0 + tRel[i]) / 60);
+    let rgb = cache.get(h);
+    if (!rgb) {
+      rgb = getRgbForRatio(clamp((h - minHour) / span, 0, 1));
+      cache.set(h, rgb);
+    }
+    const o = i * 4;
+    dots[o] = rgb[0];
+    dots[o + 1] = rgb[1];
+    dots[o + 2] = rgb[2];
+    dots[o + 3] = 255;
+  }
+  return dots;
 }
 
 // ---------- style peta ----------
@@ -333,10 +324,10 @@ export default function MapView({
     const key = filterKeyRef.current;
     const cell = tier === 'grid' ? cellForZoom(z) : null;
 
-    // 1. Selalu hitung BBOX dari viewport saat ini (+ padding 35%) agar query DB dibatasi ke wilayah terlihat
+    // 1. Selalu hitung BBOX dari viewport saat ini (+ padding 50%) agar query DB dibatasi ke wilayah terlihat
     const b = map.getBounds();
     const w = b.getWest(), s = b.getSouth(), e = b.getEast(), n = b.getNorth();
-    const padX = (e - w) * 0.35, padY = (n - s) * 0.35;
+    const padX = (e - w) * 0.5, padY = (n - s) * 0.5;
     const q = (v, fn) => (fn(v / 0.1) * 0.1).toFixed(2);
     const box = [q(w - padX, Math.floor), q(s - padY, Math.floor), q(e + padX, Math.ceil), q(n + padY, Math.ceil)];
 
@@ -388,19 +379,29 @@ export default function MapView({
           setLoading(false);
           onLoadingChange?.(false);
 
-          // Phase 2: Muat sisa riwayat historis di background
-          const histParams = new URLSearchParams(params);
-          histParams.set('start', f.start);
-          histParams.set('end', formatInput(splitMs));
+          // Phase 2 (Langkah 5c): Muat sisa riwayat historis secara paralel per chunk dan gabungkan sekali (O(N))
+          const stepMs = daysSpan > 14 ? 3 * 86400000 : 86400000;
+          const chunks = [];
+          for (let t = startMs; t < splitMs; t += stepMs) {
+            chunks.push([t, Math.min(t + stepMs, splitMs)]);
+          }
+          const parts = [decoded1];
+          const worker = async () => {
+            while (chunks.length) {
+              const [a, b] = chunks.pop(); // terbaru dulu
+              const pp = new URLSearchParams(params);
+              pp.set('start', formatInput(a));
+              pp.set('end', formatInput(b));
+              const r = await fetch(`/api/hotspots?${pp.toString()}`, { signal: ctrl.signal });
+              if (r.ok) parts.push(decodeHotspots(await r.arrayBuffer()));
+            }
+          };
 
           try {
-            const res2 = await fetch(`/api/hotspots?${histParams.toString()}`, { signal: ctrl.signal });
-            if (res2.ok) {
-              const decoded2 = decodeHotspots(await res2.arrayBuffer());
-              if (seq === seqRef.current) {
-                const merged = mergeHotspotDatasets(decoded2, decoded1);
-                setDataset({ decoded: merged, geom: buildGeometry(merged) });
-              }
+            await Promise.all([worker(), worker(), worker()]);
+            if (seq === seqRef.current) {
+              const merged = mergeMany(parts);
+              setDataset({ decoded: merged, geom: buildGeometry(merged) });
             }
           } catch (errHist) {
             if (errHist.name !== 'AbortError') console.warn('Gagal memuat batch historis lanjutan:', errHist);
@@ -577,38 +578,39 @@ export default function MapView({
     return { minHour: minH, maxHour: maxH };
   }, [filter?.start, filter?.end, selectedDate]);
 
-  // ---------- warna per titik (sampai tingkat per jam) ----------
-  const colors = useMemo(() => {
-    if (!dataset) return null;
-    return buildColors(dataset, timeBounds.minHour, timeBounds.maxHour);
-  }, [dataset, timeBounds.minHour, timeBounds.maxHour]);
+  // ---------- warna per titik: bara (hanya per dataset) vs titik (per rentang jam) ----------
+  const glowColors = useMemo(() => (dataset ? buildGlowColors(dataset) : null), [dataset]);
+  const dotColors = useMemo(
+    () => (dataset ? buildDotColors(dataset, timeBounds.minHour, timeBounds.maxHour) : null),
+    [dataset, timeBounds.minHour, timeBounds.maxHour]
+  );
 
   // ---------- data deck.gl (identitas stabil -> tidak upload ulang saat timeline bergerak) ----------
   const glowData = useMemo(() => {
-    if (!dataset || !colors) return null;
+    if (!dataset || !glowColors) return null;
     return {
       length: dataset.decoded.n,
       attributes: {
         getPosition: { value: dataset.geom.pos, size: 3 },
         getFilterValue: { value: dataset.geom.fv, size: 2 },
-        getFillColor: { value: colors.glow, size: 4, normalized: true },
+        getFillColor: { value: glowColors, size: 4, normalized: true },
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataset, colors, elevVersion]);
+  }, [dataset, glowColors, elevVersion]);
 
   const dotData = useMemo(() => {
-    if (!dataset || !colors) return null;
+    if (!dataset || !dotColors) return null;
     return {
       length: dataset.decoded.n,
       attributes: {
         getPosition: { value: dataset.geom.pos, size: 3 },
         getFilterValue: { value: dataset.geom.fv, size: 2 },
-        getFillColor: { value: colors.dots, size: 4, normalized: true },
+        getFillColor: { value: dotColors, size: 4, normalized: true },
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataset, colors, elevVersion]);
+  }, [dataset, dotColors, elevVersion]);
 
   // ---------- interaksi ----------
   const handleHover = useCallback((info) => {

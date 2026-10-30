@@ -25,16 +25,20 @@ export async function GET(request) {
     const b = bboxParam.split(',').map(Number);
     if (b.length === 4 && b.every(Number.isFinite)) bbox = b;
   }
-  const opts = {
-    start,
-    end,
-    source: ['all', 'firms', 'sipongi'].includes(sourceParam) ? sourceParam : 'all',
-    bbox,
-  };
+  const source = ['all', 'firms', 'sipongi'].includes(sourceParam) ? sourceParam : 'all';
+  const opts = { start, end, source, bbox };
+
+  const key = `hs-sum|${source}|${start || ''}|${end || ''}|${bbox ? bbox.join(',') : ''}`;
+  const nowWallMs = Date.now() + 7 * 3600_000;
+  const endMs = end ? Date.parse(end.length === 16 ? `${end}:00Z` : end) : Infinity;
+  const isLive = !Number.isFinite(endMs) || endMs > nowWallMs - 3 * 3600_000;
+  const ttl = isLive ? 60 : 3600;
 
   try {
-    const data = await cached(request.url, () => querySummary(opts));
-    return NextResponse.json(data, { headers: { 'Cache-Control': 'private, max-age=30' } });
+    const data = await cached(key, () => querySummary(opts), ttl);
+    return NextResponse.json(data, {
+      headers: { 'Cache-Control': isLive ? 'private, max-age=30' : 'private, max-age=3600' },
+    });
   } catch (error) {
     console.error('Error in /api/hotspots/summary:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
